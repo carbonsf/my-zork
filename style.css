@@ -1,0 +1,182 @@
+/* ==========================================================================
+   Embarcadero — CRT / vintage terminal aesthetic
+   ========================================================================== */
+
+:root {
+  --bg: #0a0e0a;
+  --bg-deep: #050705;
+  --fg: #9ef09e;          /* phosphor green */
+  --fg-dim: #5a8a5a;
+  --fg-bright: #d6ffd6;
+  --accent: #ffe066;      /* amber highlight for room names */
+  --accent-dim: #b89a3a;
+  --item: #7fd8ff;        /* cyan-ish for item hints */
+  --npc: #ffb0b0;         /* NPC dialogue */
+  --system: #88aa88;      /* system / meta messages */
+  --error: #ff8f6b;
+  --glow: 0 0 2px rgba(158, 240, 158, 0.6), 0 0 8px rgba(158, 240, 158, 0.25);
+  --font-mono: "IBM Plex Mono", "SF Mono", "Menlo", "Consolas", "Courier New", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg-deep);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  line-height: 1.45;
+  overflow: hidden;
+}
+
+body {
+  /* subtle vignette */
+  background:
+    radial-gradient(ellipse at center, #0d120d 0%, #050705 80%, #000 100%);
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+#crt {
+  position: relative;
+  flex: 1 1 auto;
+  margin: 12px;
+  padding: 0;
+  border: 1px solid #1a2a1a;
+  border-radius: 10px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  text-shadow: var(--glow);
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 80px rgba(0, 40, 0, 0.5),
+    0 0 30px rgba(0, 30, 0, 0.6);
+}
+
+/* ---- Title bar ---- */
+#titlebar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px dashed #2a3a2a;
+  color: var(--fg-bright);
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex: 0 0 auto;
+}
+#title { color: var(--accent); }
+#stats { color: var(--fg-dim); font-weight: normal; }
+#stats #score, #stats #moves { color: var(--fg-bright); }
+
+/* ---- Output area ---- */
+#output {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px 18px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  scrollbar-width: thin;
+  scrollbar-color: #2a4a2a transparent;
+}
+#output::-webkit-scrollbar { width: 8px; }
+#output::-webkit-scrollbar-thumb { background: #2a4a2a; border-radius: 4px; }
+
+/* ---- Output line types ---- */
+.line { margin: 0 0 6px 0; }
+.line.room-name {
+  color: var(--accent);
+  font-weight: bold;
+  letter-spacing: 0.05em;
+  margin-top: 10px;
+}
+.line.room-desc { color: var(--fg); }
+.line.item { color: var(--item); }
+.line.npc { color: var(--npc); font-style: italic; }
+.line.system { color: var(--system); font-style: italic; }
+.line.error { color: var(--error); }
+.line.echo {
+  color: var(--fg-bright);
+  opacity: 0.85;
+  margin-top: 10px;
+}
+.line.echo::before { content: "> "; color: var(--fg-dim); }
+
+.item-word { color: var(--item); }
+.npc-word { color: var(--npc); }
+.exit-word { color: var(--accent-dim); }
+
+/* ---- Input area ---- */
+#input-form {
+  display: flex;
+  align-items: center;
+  padding: 8px 14px 12px 14px;
+  border-top: 1px dashed #2a3a2a;
+  flex: 0 0 auto;
+}
+#prompt {
+  color: var(--fg-bright);
+  margin-right: 8px;
+  font-weight: bold;
+}
+#input {
+  flex: 1 1 auto;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--fg-bright);
+  font-family: inherit;
+  font-size: inherit;
+  caret-color: var(--fg-bright);
+  text-shadow: var(--glow);
+}
+
+/* blinking caret effect when empty */
+#input:focus { animation: none; }
+
+/* ---- Scanlines overlay ---- */
+#scanlines {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.18) 3px,
+    rgba(0, 0, 0, 0) 4px
+  );
+  mix-blend-mode: multiply;
+  opacity: 0.6;
+  z-index: 10;
+}
+
+/* subtle flicker */
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  48% { opacity: 1; }
+  50% { opacity: 0.96; }
+  52% { opacity: 1; }
+}
+#crt { animation: flicker 6s infinite; }
+
+/* typewriter caret on in-progress lines */
+.typing::after {
+  content: "▊";
+  color: var(--fg-bright);
+  margin-left: 2px;
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* small screens */
+@media (max-width: 600px) {
+  #crt { margin: 4px; }
+  body { font-size: 14px; }
+}

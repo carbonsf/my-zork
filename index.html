@@ -1,0 +1,2897 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Embarcadero — A Text Adventure</title>
+
+  <!-- Critical fallback styles so the terminal theme always applies, even
+       if style.css fails to load in the preview sandbox. -->
+  <style>
+    html, body { margin:0; padding:0; height:100%; background:#050705; color:#9ef09e;
+      font-family: "IBM Plex Mono", "SF Mono", Menlo, Consolas, "Courier New", monospace;
+      font-size: 15px; line-height: 1.45; overflow: hidden; }
+    body { display: flex; }
+    #crt { position: relative; flex: 1 1 auto; margin: 12px; border: 1px solid #1a2a1a;
+      border-radius: 10px; background: #0a0e0a; display: flex; flex-direction: column;
+      overflow: hidden; }
+    #titlebar { display:flex; justify-content:space-between; align-items:center;
+      padding: 8px 16px; border-bottom: 1px dashed #2a3a2a; color: #d6ffd6;
+      font-weight: bold; letter-spacing: 0.08em; text-transform: uppercase; flex: 0 0 auto; }
+    #title { color:#ffe066; }
+    #stats { color:#5a8a5a; font-weight:normal; }
+    #output { flex: 1 1 auto; overflow-y: auto; padding: 14px 18px;
+      white-space: pre-wrap; word-wrap: break-word; min-height: 0; }
+    #input-form { display:flex; align-items:center; padding: 8px 14px 12px 14px;
+      border-top: 1px dashed #2a3a2a; flex: 0 0 auto; }
+    #prompt { color:#d6ffd6; margin-right: 8px; font-weight: bold; }
+    #input { flex:1 1 auto; background: transparent; border: none; outline: none;
+      color: #d6ffd6; font-family: inherit; font-size: inherit; }
+  </style>
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Global error reporter — surfaces any JS error directly in the UI
+       so we never get a silent blank page. -->
+  <script>
+    window.addEventListener("error", function (e) {
+      try {
+        var el = document.getElementById("output");
+        if (!el) return;
+        var d = document.createElement("div");
+        d.style.cssText =
+          "color:#ff8f6b;background:#1a0a0a;padding:10px 14px;margin:8px 0;" +
+          "border-left:3px solid #ff8f6b;font-family:monospace;white-space:pre-wrap;";
+        var msg = (e.error && e.error.stack) ? e.error.stack : (e.message || String(e));
+        d.textContent = "JS ERROR:\n" + msg + "\n\n(source: " +
+          (e.filename || "?") + ":" + (e.lineno || "?") + ")";
+        el.appendChild(d);
+      } catch (_) {}
+    });
+  </script>
+</head>
+<body>
+  <div id="crt">
+    <div id="titlebar">
+      <span id="title">EMBARCADERO <span style="color:#5a8a5a;font-weight:normal;font-size:11px;">v3</span></span>
+      <span id="stats">
+        <span id="score-label">SCORE</span> <span id="score">0</span>/<span id="max-score">0</span>
+        &nbsp;&nbsp;
+        <span id="moves-label">MOVES</span> <span id="moves">0</span>
+      </span>
+    </div>
+
+    <div id="output" aria-live="polite" aria-atomic="false"></div>
+
+    <form id="input-form" autocomplete="off">
+      <span id="prompt">&gt;</span>
+      <input
+        id="input"
+        type="text"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        autofocus
+      />
+    </form>
+    <div id="scanlines" aria-hidden="true"></div>
+  </div>
+
+  <!-- Inlined: content.js + world.js + engine.js (sandbox-safe, split; rev 2) -->
+  <script>try{
+/* ==========================================================================
+   content.js — Long-form text strings for the engine.
+   Room/item/NPC prose is inlined in world.js; this file carries cross-
+   cutting text: the intro, help, response pools, specials, and finale.
+   ========================================================================== */
+
+window.CONTENT = {
+
+  /* ------------------------------------------------------------------ */
+  /*  Intro                                                              */
+  /* ------------------------------------------------------------------ */
+  intro: [
+    "═══════════════════════════════════════════",
+    "   THE SECRET OF THE EMBARCADERO",
+    "   ~ An Adventure Along the San Francisco Waterfront ~",
+    "═══════════════════════════════════════════",
+    "",
+    "San Francisco. Early morning.",
+    "Fog still drapes the bay.",
+    "",
+    "You stand at the north end of the Embarcadero,",
+    "though you can't quite remember why.",
+    "Your pockets are empty.",
+    "But intuition whispers that something important",
+    "waits for you along this stretch of waterfront —",
+    "",
+    "the memories of sailors who worked this harbor,",
+    "the ghosts of the rails that once ran beneath the piers,",
+    "and a trail of clues someone has left behind for you.",
+    "",
+    "Everything begins at Pier 39.",
+    "",
+    "(Type HELP for a command summary, or HINT if you get stuck.)",
+    ""
+  ].join("\n"),
+
+  /* ------------------------------------------------------------------ */
+  /*  Help                                                               */
+  /* ------------------------------------------------------------------ */
+  help: [
+    "COMMANDS",
+    "  Movement : N, S, E, W, NE, NW, SE, SW, UP, DOWN",
+    "             or GO <direction> — also ENTER, LEAVE, INSIDE",
+    "  Looking  : LOOK (L), EXAMINE <thing> (X <thing>)",
+    "  Items    : TAKE <thing>, DROP <thing>, INVENTORY (I)",
+    "  Using    : USE <thing> ON <thing>",
+    "             GIVE <thing> TO <npc>",
+    "  People   : TALK TO <npc>, ASK <npc> ABOUT <topic>",
+    "  Meta     : SAVE [1-3], LOAD [1-3], SAVES, SCORE, MAP, WAIT (Z)",
+    "             G (repeat last), UNDO, RESTART",
+    "  Stuck?   : HINT — escalating nudge / push / shove"
+  ].join("\n"),
+
+  /* ------------------------------------------------------------------ */
+  /*  Failure & atmospheric response pools                               */
+  /* ------------------------------------------------------------------ */
+  pools: {
+    cantDoThat: [
+      "That doesn't seem to work.",
+      "Nothing happens.",
+      "You try, but accomplish nothing.",
+      "That's not going to work here.",
+      "Nope."
+    ],
+    unknownVerb: [
+      "I don't understand the word \"{word}\".",
+      "\"{word}\"? That's not a word I know.",
+      "You can't {word} things in this game."
+    ],
+    unknownNoun: [
+      "You don't see any {noun} here.",
+      "There's no {noun} anywhere nearby.",
+      "A {noun}? You don't see one."
+    ],
+    notAccessible: [
+      "You can't see any {noun} here.",
+      "The {noun} isn't within reach.",
+      "You'd have to find a {noun} first."
+    ],
+    missingObject: [
+      "What do you want to {verb}?",
+      "{verb} what?",
+      "You'll have to be more specific — {verb} what?"
+    ],
+    ambiguous: [
+      "Do you mean the {a} or the {b}?",
+      "Which do you mean — the {a} or the {b}?"
+    ],
+    emptyInput: [
+      "(You say nothing.)",
+      "(Silence.)"
+    ],
+    profanity: [
+      "Such language! And in a nice place like this.",
+      "A nearby seagull looks pointedly unimpressed.",
+      "A passing tourist pretends not to hear."
+    ],
+    alreadyHave: [
+      "You already have the {noun}.",
+      "It's already in your pocket."
+    ],
+    cantTake: [
+      "You can't take the {noun}.",
+      "The {noun} won't budge.",
+      "That's not something you can carry."
+    ],
+    tooHeavy: [
+      "The {noun} is far too heavy to lift."
+    ],
+    dontHave: [
+      "You don't have a {noun}.",
+      "You're not carrying any {noun}."
+    ],
+    dropped: [
+      "Dropped.",
+      "You set down the {noun}.",
+      "The {noun} clatters to the ground."
+    ],
+    taken: [
+      "Taken.",
+      "You pocket the {noun}.",
+      "The {noun} is now yours."
+    ],
+    dark: [
+      "It is pitch black. You can't see a thing.",
+      "The darkness is absolute. Better not stumble."
+    ],
+    wait: [
+      "Time passes. The waves fold in and out.",
+      "Sea wind brushes your face.",
+      "A gull cuts overhead.",
+      "A foghorn moans somewhere distant.",
+      "Sunlight breaks through a seam in the clouds."
+    ]
+  },
+
+  /* ------------------------------------------------------------------ */
+  /*  Easter eggs & one-word specials                                    */
+  /* ------------------------------------------------------------------ */
+  specials: {
+    xyzzy: "Nothing happens. This isn't Colossal Cave.",
+    plugh: "A hollow voice says, \"Fool.\"   ...no — that was just a gull.",
+    plover: "No exotic birds here. Just gulls.",
+    diagnose: "You are in good health. A bit windburned, perhaps.",
+    pray: "You offer a quiet prayer. The sound of the waves seems a little calmer.",
+    sing: "You start humming \"I Left My Heart in San Francisco.\" A passing tourist applauds.",
+    swim: "At this water temperature, hypothermia would set in within five minutes. Better not.",
+    jump: "Reckless things like that are best avoided.",
+    fly: "Regrettably, you lack the capacity.",
+    scream: "\"AAAAAAAH!\" The cry echoes off the Bay Bridge. A flock of pigeons lifts off all at once.",
+    dance: "You break into a dance on the Embarcadero. A street performer watches, visibly impressed.",
+    sleep: "A nap on a bench is tempting, but you have an adventure to finish.",
+    eat: "You have nothing to eat right now. (Unless you're holding sourdough, of course.)",
+    hello: "No one answers. A gull tilts its head at you.",
+    hi:    "No one answers. A gull tilts its head at you."
+  },
+
+  /* ------------------------------------------------------------------ */
+  /*  Finale sequences (keyed by id; used by endings.finale / exit       */
+  /*  interactions)                                                      */
+  /* ------------------------------------------------------------------ */
+  finale: {
+    lighthouse: [
+      "",
+      "Inside the lighthouse, the air is still. A small round chamber",
+      "holds an ancient control panel with three shallow indentations.",
+      "Carved into the stone above: \"The record of the sea, the memory",
+      "of the land, and the one that points the way. When three are",
+      "gathered, the light returns.\"",
+      "",
+      "You place the captain's log in the first indentation.  ...click.",
+      "You place the vintage train model in the second.   ...click, click.",
+      "You place the brass compass in the third.",
+      "",
+      "......",
+      "",
+      "A low rumble. The lighthouse trembles. Above you, a great lens",
+      "begins to turn — and a dazzling pillar of light lances out across",
+      "the bay.",
+      "",
+      "The beam parts the fog, glances off the crimson towers of the",
+      "Golden Gate Bridge, flashes along the silver cables of the Bay",
+      "Bridge, and touches even the cold walls of Alcatraz with a",
+      "sudden, unexpected warmth.",
+      "",
+      "The entire bay glows gold.",
+      "",
+      "You have unlocked the secret of the Embarcadero. The captains who",
+      "once walked this coast, the railworkers who laid the rails beneath",
+      "these piers, the long procession of lives that passed through here —",
+      "their memory lives on, inside this light.",
+      "",
+      "*** The adventure is over. ***",
+      "",
+      "But the Embarcadero's story goes on — the next time you walk it, too."
+    ]
+  }
+};
+
+window.__loaded_content = true;
+}catch(e){window.__err_content = (e&&e.stack)||String(e);}</script>
+  <script>try{
+/* ==========================================================================
+   world.js — Structural game data: rooms, items, NPCs, scores, hints,
+   spawns, endings. The engine is data-driven; modifying this file alone
+   should be enough to change game content.
+
+   Map topology (north → south along the waterfront):
+
+       pier39_deck (up)
+            |
+       pier39_plaza
+            |
+       pier7_promenade  ──→  hidden_dock  (one-way, west after telescope clue)
+            |                      |
+            |                      └──→ ferry_building_interior (up ladder east)
+            |
+       ferry_building_interior  ←→  ferry_building_balcony (up)
+            |  └──→ ferry_dock (east; one-way, token consumed)
+            |                └──→ rincon_park (south; over fence, one-way)
+       rincon_park
+            |  (south path blocked by sea lion)
+       cupids_arrow  ──→  underground_passage (down, one-way back up)
+            |                      └──→ south_promenade (south, needs flashlight)
+       south_promenade
+            |
+       ballpark_entrance
+            |
+       lighthouse_point  (finale)
+   ========================================================================== */
+
+window.WORLD = {
+
+  meta: {
+    title: "Embarcadero",
+    startRoom: "pier39_plaza",
+    version: "1.0.0"
+  },
+
+  /* ======================================================================
+     ROOMS
+     ====================================================================== */
+  rooms: {
+
+    /* ---------------- Northern piers ---------------- */
+
+    pier39_plaza: {
+      id: "pier39_plaza",
+      name: "Pier 39 Plaza",
+      descriptions: {
+        default:
+          "You stand at the tourist-thronged entrance to Pier 39. Steam from " +
+          "boiling crab mingles with the salt air, and the gaudy signs of " +
+          "souvenir shops clutter your view. The barking of sea lions echoes " +
+          "from the east. At your feet, a silver coin glints — someone's lost " +
+          "pocket change. Stairs climb north to the observation deck, and a " +
+          "promenade continues south.",
+        short:
+          "Pier 39 Plaza. Tourist bustle, salt air. Stairs up north; promenade south."
+      },
+      exits: {
+        north: { to: "pier39_deck",
+                 message: "You climb the wooden stairs up to the deck." },
+        up:    { to: "pier39_deck",
+                 message: "You climb the wooden stairs up to the deck." },
+        south: { to: "pier7_promenade" },
+        east:  { to: null, blocked: true,
+                 failMessage: "The sea lions have entirely claimed the eastern dock. " +
+                              "Get close and they rear up with a threatening bark." },
+        west:  { to: null, blocked: true,
+                 failMessage: "A wall of souvenir shops blocks your way — and " +
+                              "you're in no mood to browse." }
+      },
+      items: ["silver_coin"],
+      npcs: ["street_performer"],
+      onEnterFirst: "Sea air slaps your face. The great sweep of San Francisco Bay " +
+                    "opens up before you, and with it, the feeling that an adventure " +
+                    "is about to begin."
+    },
+
+    pier39_deck: {
+      id: "pier39_deck",
+      name: "Pier 39 Observation Deck",
+      descriptions: {
+        default:
+          "From the deck you can see the whole sweep of the bay. Alcatraz Island " +
+          "floats dimly in the fog. An old brass telescope is bolted to the railing " +
+          "— it has a coin slot. At the edge of the deck, something is carved " +
+          "into a weather-beaten wooden plank. Stairs lead back down to the plaza.",
+        short:
+          "Observation deck. Alcatraz in the fog. Stairs down to the plaza.",
+        telescope_clue:
+          "From the deck you can see the sweep of the bay. The memory of what you " +
+          "saw through the telescope is still fresh — something glinting near a " +
+          "half-hidden dock below Pier 7. Stairs lead back down."
+      },
+      exits: {
+        down:  { to: "pier39_plaza",
+                 message: "You take the stairs back down to the plaza." },
+        south: { to: "pier39_plaza",
+                 message: "You take the stairs back down to the plaza." }
+      },
+      items: [],
+      scenery: ["brass_telescope", "carved_plank"],
+      onEnterFirst: "The wind is strong. You hold on to your hat and walk to the railing."
+    },
+
+    pier7_promenade: {
+      id: "pier7_promenade",
+      name: "Pier 7 Promenade",
+      descriptions: {
+        default:
+          "A beautiful wooden pier stretches straight out into the bay. Fishermen " +
+          "are evenly spaced along its length, lines dangling into the water. " +
+          "Midway along the boards, a rusty key is wedged into the gap between " +
+          "two planks. Pier 39 lies to the north, and the Ferry Building to the " +
+          "south. Past the railing to the west you can half-glimpse a smaller, " +
+          "hidden dock below.",
+        short:
+          "Pier 7 boardwalk. Fishermen. Pier 39 north, Ferry Building south."
+      },
+      exits: {
+        north: { to: "pier39_plaza" },
+        south: { to: "ferry_building_interior",
+                 message: "The Ferry Building clock tower looms larger as you approach." },
+        west: {
+          to: "hidden_dock",
+          requires: { flag: "telescope_clue" },
+          failMessage: "Something may be over the railing, but you have no reason to " +
+                       "climb down.",
+          message: "You swing over the railing and pick your way carefully down to " +
+                   "the hidden dock."
+        }
+      },
+      items: ["rusty_key"],
+      npcs: ["old_fisherman"],
+      onEnterFirst: "The boards creak pleasantly beneath your feet. Seabirds wheel overhead."
+    },
+
+    hidden_dock: {
+      id: "hidden_dock",
+      name: "Hidden Dock",
+      descriptions: {
+        default:
+          "A small floating dock concealed from the main promenade. It rocks " +
+          "uneasily with the waves. Inside a weathered crate, wrapped in oilcloth, " +
+          "lies an old nautical chart. The walls are too high to climb back to " +
+          "the promenade — but a ladder east should lead up near the Ferry Building.",
+        short:
+          "Hidden floating dock. Ladder east to the Ferry Building."
+      },
+      exits: {
+        east: { to: "ferry_building_interior",
+                message: "You climb the ladder and emerge near the Ferry Building." },
+        west: { to: null, blocked: true,
+                failMessage: "Only the bay lies west. Swimming would be unwise." },
+        up:   { to: null, blocked: true,
+                failMessage: "The wall is high and slick. There is no going back up." }
+      },
+      items: ["old_nautical_chart"],
+      onEnterFirst: {
+        message: "Your shoes are wet from the waves. Almost no one comes here.",
+        scoreEvent: "found_hidden_dock"
+      }
+    },
+
+    /* ---------------- Ferry Building zone ---------------- */
+
+    ferry_building_interior: {
+      id: "ferry_building_interior",
+      name: "Inside the Ferry Building",
+      descriptions: {
+        default:
+          "You stand inside San Francisco's iconic Ferry Building. Under the " +
+          "high arched ceiling, artisanal food shops and restaurants line the " +
+          "nave. The smell of fresh bread and coffee hangs in the air. A loaf " +
+          "of sourdough bread sits on a sampling counter. Exits lead north to " +
+          "the promenade, south to Rincon Park, east to the ferry dock (through " +
+          "a turnstile), and up to the second-floor balcony.",
+        short:
+          "Ferry Building nave. Market smells. Exits: north, south, east (turnstile), up.",
+        second_bread_hint:
+          "Ferry Building nave. Market smells. You notice now that a second loaf " +
+          "of sourdough has been tucked almost out of sight beneath the bread " +
+          "counter. Exits: north, south, east (turnstile), up."
+      },
+      exits: {
+        north: { to: "pier7_promenade" },
+        south: { to: "rincon_park",
+                 message: "You leave the Ferry Building and walk south." },
+        east:  { to: "ferry_dock",
+                 requires: { item: "ferry_token" },
+                 failMessage: "A turnstile blocks the way. It wants a token.",
+                 consumesItem: true,
+                 message: "You drop the token in the turnstile. A click, and the " +
+                          "gate swings open." },
+        up:    { to: "ferry_building_balcony",
+                 message: "You climb the elegant staircase to the second floor." }
+      },
+      items: ["sourdough_bread"],
+      npcs: ["cheese_vendor"],
+      onEnterFirst: "You catch your breath in the Ferry Building's grand space. Since " +
+                    "its first construction in 1898, this place has been rebuilt more " +
+                    "than once."
+    },
+
+    ferry_building_balcony: {
+      id: "ferry_building_balcony",
+      name: "Ferry Building Balcony",
+      descriptions: {
+        default:
+          "From the second-floor balcony you look down on the market below. " +
+          "Stained-glass windows throw colored light across the floor. Inside an " +
+          "old display case, among notes on the history of the ferries, a " +
+          "forgotten ferry token lies in one corner. Stairs lead back down.",
+        short:
+          "Second-floor balcony. Stained-glass light. Stairs down."
+      },
+      exits: {
+        down: { to: "ferry_building_interior",
+                message: "You descend to the market floor." }
+      },
+      items: ["ferry_token"],
+      scenery: ["display_case"],
+      onEnterFirst: "It's quieter up here. Most tourists stay on the main floor."
+    },
+
+    ferry_dock: {
+      id: "ferry_dock",
+      name: "Ferry Dock",
+      descriptions: {
+        default:
+          "The ferry dock is windswept. A single old ferry is moored at its end, " +
+          "still. A captain's log lies forgotten on the deck. From the dock's far " +
+          "edge you can see Oakland across the bay. This is a dead end — the gate " +
+          "behind you doesn't open from this side, but the low fence to the south " +
+          "might take you toward Rincon Park.",
+        short:
+          "Ferry Dock. An old ferry. South: fence over to Rincon Park."
+      },
+      exits: {
+        west:  { to: null, blocked: true,
+                 failMessage: "The gate only opens from the other side. One way." },
+        south: { to: "rincon_park",
+                 message: "You pick your way carefully over the low fence and drop " +
+                          "down into Rincon Park." }
+      },
+      items: ["captains_log"],
+      onEnterFirst: "The gate clicks shut behind you. It seems there's no going back."
+    },
+
+    /* ---------------- Southern waterfront ---------------- */
+
+    rincon_park: {
+      id: "rincon_park",
+      name: "Rincon Park",
+      descriptions: {
+        default:
+          "Enormous piers of the Bay Bridge soar overhead; their shadows sweep " +
+          "the park. A few benches sit on trimmed lawns. At the park's center is " +
+          "a tiled Cupid mosaic. North leads back to the Ferry Building, and " +
+          "south toward Cupid's Span — except a huge sea lion sprawls across " +
+          "the south path.",
+        short:
+          "Rincon Park. Bay Bridge shadow. A sea lion blocks the path south.",
+        sea_lion_appeased:
+          "Rincon Park. The Bay Bridge shadow is cool. Ferry Building north, the " +
+          "path to Cupid's Span lies open south."
+      },
+      exits: {
+        north: { to: "ferry_building_interior" },
+        south: {
+          to: "cupids_arrow",
+          requires: { flag: "sea_lion_appeased" },
+          failMessage: "The massive sea lion blocks the path! It must weigh three " +
+                       "hundred kilos. Get close and it rears up with a warning bark. " +
+                       "Some way to move it is going to be needed...",
+          message: "You step quietly past the contented sea lion."
+        }
+      },
+      scenery: ["cupid_mosaic", "bay_bridge"],
+      npcs: ["giant_sea_lion"],
+      onEnterFirst: "The sheer scale of the Bay Bridge is overwhelming. Traffic " +
+                    "murmurs somewhere high overhead."
+    },
+
+    cupids_arrow: {
+      id: "cupids_arrow",
+      name: "Cupid's Span",
+      descriptions: {
+        default:
+          "A colossal bow-and-arrow sculpture rises from the Embarcadero — " +
+          "\"Cupid's Span\". Over twenty meters tall, it is about to loose its " +
+          "arrow out over the bay. A small keyhole is set into the base. Behind " +
+          "the pedestal, dark stairs descend. Rincon Park lies north; the " +
+          "southern promenade, south.",
+        short:
+          "Cupid's Span. Keyhole in the base. Dark stairs down. North & south.",
+        base_opened:
+          "Cupid's Span. A side panel in the base stands open, a hollow where " +
+          "something had been hidden. Dark stairs down, Rincon Park north, " +
+          "promenade south."
+      },
+      exits: {
+        north: { to: "rincon_park" },
+        south: { to: "south_promenade" },
+        down:  { to: "underground_passage",
+                 message: "You descend into the dark. The air cools and thickens.",
+                 alwaysVisible: true }
+      },
+      scenery: ["cupid_pedestal"],
+      onEnterFirst: "The sculpture's shadow falls long over the stones. This place " +
+                    "feels like it has secrets."
+    },
+
+    underground_passage: {
+      id: "underground_passage",
+      name: "Underground Passage",
+      descriptions: {
+        dark:
+          "Black — complete, absolute darkness. Your outstretched hand meets cold " +
+          "concrete. Somewhere, water drips. You can't see a thing.",
+        default:
+          "An old maintenance tunnel under the Embarcadero. Rusted rails — the " +
+          "remnants of the Belt Line Railroad — run along the base of the wall. " +
+          "Between graffiti and moss, the passage continues south. Stairs climb " +
+          "back up. A dust-covered vintage train model sits in a hollow in the wall.",
+        short:
+          "Belt Line Railroad remnants. South passage, stairs up."
+      },
+      dark: true,
+      exits: {
+        up: { to: "cupids_arrow",
+              message: "You climb back up to the light.",
+              alwaysVisible: true },
+        south: {
+          to: "south_promenade",
+          requires: { item: "flashlight" },
+          failMessage: "Groping south through the pitch black seems unwise.",
+          message: "You follow the tunnel south and emerge, blinking, into the sun."
+        }
+      },
+      items: ["vintage_train_model"],
+      onEnterFirst: {
+        message: "You nearly miss the last stair in the dark. It's very dark. Some " +
+                 "kind of light source is called for.",
+        scoreEvent: "explored_underground"
+      }
+    },
+
+    south_promenade: {
+      id: "south_promenade",
+      name: "South Promenade",
+      descriptions: {
+        default:
+          "The south side of the Embarcadero. Fewer tourists — mostly joggers and " +
+          "cyclists. Palm trees stand at even intervals; someone is reading on a " +
+          "bench. By a flowerbed, a handmade cloth map is almost about to be " +
+          "carried off by the wind. Cupid's Span lies north; the ballpark is south.",
+        short:
+          "South promenade. Quiet seaside. Cupid's Span north, ballpark south."
+      },
+      exits: {
+        north: { to: "cupids_arrow" },
+        south: { to: "ballpark_entrance",
+                 message: "Stadium light towers appear in the distance." }
+      },
+      items: ["cloth_map"],
+      npcs: ["jogger_npc"],
+      onEnterFirst: "The noise of the north falls away. The air softens. You can " +
+                    "hear the waves."
+    },
+
+    ballpark_entrance: {
+      id: "ballpark_entrance",
+      name: "Ballpark Entrance",
+      descriptions: {
+        default:
+          "You stand in front of Oracle Park (formerly AT&T Park). A bronze " +
+          "Willie Mays strikes his great catcher's stance. There's no game today, " +
+          "and the stadium is quiet. An old-fashioned padlock hangs on the front " +
+          "gate. North is the promenade, south the lighthouse point.",
+        short:
+          "Ballpark entrance. Willie Mays statue. Promenade north, lighthouse south."
+      },
+      exits: {
+        north: { to: "south_promenade" },
+        south: {
+          to: "lighthouse_point",
+          requires: { items: ["brass_compass", "old_nautical_chart"] },
+          failMessage: "The path south along the rocky shore is lost in thick fog. " +
+                       "Without a bearing and a chart of the route, you'd surely lose " +
+                       "your way.",
+          message: "With the compass and the chart to guide you, you make your way " +
+                   "through the fog along the rocks."
+        }
+      },
+      scenery: ["ballpark_gate", "willie_mays_statue"],
+      onEnterFirst: "The Giants' home. Even on an off-day you can feel the afterglow " +
+                    "of the crowd."
+    },
+
+    lighthouse_point: {
+      id: "lighthouse_point",
+      name: "Lighthouse Point",
+      descriptions: {
+        default:
+          "The southernmost tip of the Embarcadero. A small lighthouse stands at " +
+          "the point. Its door is ajar — you could step inside. At its foot, an " +
+          "old stone marker bears carved words. Beyond is only sea. North leads " +
+          "back to the ballpark.",
+        short:
+          "Lighthouse Point. Lighthouse door ajar. North to the ballpark.",
+        game_won:
+          "The lighthouse's beam sweeps across the whole bay. The fog is gone — " +
+          "from the Golden Gate to the Bay Bridge, all of San Francisco Bay " +
+          "stretches out, clear and golden."
+      },
+      exits: {
+        north:   { to: "ballpark_entrance" },
+        inside:  { interaction: "enter_lighthouse" }
+      },
+      interactions: {
+        enter_lighthouse: {
+          requires: { items: ["captains_log", "vintage_train_model", "brass_compass"] },
+          failMessage: "Inside the lighthouse it's dim. A stone altar holds three " +
+                       "indentations — but you don't have all three things it wants.",
+          finale: "lighthouse",
+          setsFlag: "game_won",
+          scoreEvent: "completed_game"
+        }
+      },
+      scenery: ["stone_marker", "lighthouse_door"],
+      onEnterFirst: {
+        message: "Waves break on the rocks and spray lightly touches your face. " +
+                 "This is the end of the Embarcadero.",
+        scoreEvent: "reached_lighthouse"
+      }
+    }
+  },
+
+  /* ======================================================================
+     ITEMS
+     ====================================================================== */
+  items: {
+
+    /* ---- Portable, puzzle-relevant ---- */
+
+    silver_coin: {
+      id: "silver_coin",
+      name: "silver coin",
+      aliases: ["coin", "silver", "old coin", "money", "quarter"],
+      description:
+        "An old silver coin. One face bears the Ferry Building's stamp; the " +
+        "other reads \"1898\". It looks the right size for a telescope slot.",
+      examine:
+        "A silver coin, stamped 1898 — the year the Ferry Building was built. " +
+        "Old, but still bright.",
+      portable: true,
+      weight: 1,
+      useAlone: {
+        message: "You flip the coin in your fingers. It rings nicely.",
+        consumesItem: false
+      },
+      useWith: {
+        brass_telescope: {
+          message:
+            "The coin drops into the slot with a click, and the telescope's lens " +
+            "cover swings open. You put your eye to it — and far below Pier 7, " +
+            "a small hidden dock, half-concealed. Something like a wooden crate " +
+            "sits on it.",
+          consumesItem: true,
+          setsFlag: "telescope_clue",
+          scoreEvent: "used_telescope"
+        }
+      }
+    },
+
+    rusty_key: {
+      id: "rusty_key",
+      name: "rusty key",
+      aliases: ["key", "old key", "brass key", "rusted key"],
+      description:
+        "An old brass key, red with rust. An unusual, ornate shape.",
+      examine:
+        "A complex, decorative key. Meant for some kind of pedestal or monument, " +
+        "it looks like.",
+      portable: true,
+      weight: 1,
+      useWith: {
+        cupid_pedestal: {
+          message:
+            "The key slides into the keyhole perfectly. With a slow grinding " +
+            "sound, a panel in the side of the base swings open — and reveals " +
+            "a brass compass hidden inside.",
+          consumesItem: true,
+          grantsItem: "brass_compass",
+          setsFlag: "base_opened",
+          scoreEvent: "opened_cupid_base"
+        },
+        ballpark_gate: {
+          success: false,
+          message: "The keyhole is the wrong shape. This isn't the right key.",
+          consumesItem: false
+        }
+      }
+    },
+
+    old_nautical_chart: {
+      id: "old_nautical_chart",
+      name: "old nautical chart",
+      aliases: ["chart", "nautical chart", "map", "sea chart"],
+      description:
+        "An old nautical chart, wrapped in oilcloth. It shows the currents and " +
+        "reefs of San Francisco Bay in fine detail.",
+      examine:
+        "A careful hand-drawn chart. At the bay's southern tip it marks " +
+        "\"lighthouse\" with a dotted safe passage to it — but without a " +
+        "compass bearing, the route is hard to read.",
+      portable: true,
+      weight: 1,
+      useWith: {
+        brass_compass: {
+          message:
+            "You lay the compass on the chart. A safe route through the rocky " +
+            "southern point emerges.",
+          consumesItem: false,
+          setsFlag: "chart_compass_combined",
+          scoreEvent: "used_chart_compass"
+        }
+      }
+    },
+
+    sourdough_bread: {
+      id: "sourdough_bread",
+      name: "loaf of sourdough bread",
+      aliases: ["bread", "sourdough", "loaf"],
+      description:
+        "San Francisco's famous sourdough. Still warm, fragrant.",
+      examine:
+        "A round loaf from Boudin Bakery. Crisp crust, soft crumb.",
+      portable: true,
+      weight: 1,
+      useAlone: {
+        message: "You tear off a piece and eat it. Incredible — this is why " +
+                 "San Francisco is famous. But eating the whole loaf would be a waste.",
+        consumesItem: false
+      },
+      useWith: {
+        old_fisherman: {
+          message:
+            "The old fisherman takes the bread and grins. \"Thanks. Here — a " +
+            "little something in return.\" He pulls a small flashlight from his " +
+            "coat. \"Take it. Useful in dark places.\"",
+          consumesItem: true,
+          grantsItem: "flashlight",
+          setsFlag: "fisherman_traded",
+          scoreEvent: "traded_with_fisherman"
+        },
+        giant_sea_lion: {
+          message:
+            "You toss the bread in front of the sea lion. Its eyes light up — " +
+            "and it swallows the loaf in a single gulp. It grunts contentedly " +
+            "and lumbers to the side of the path. The way south is open.",
+          consumesItem: true,
+          setsFlag: "sea_lion_appeased",
+          scoreEvent: "appeased_sea_lion"
+        }
+      }
+    },
+
+    /* Hidden second loaf — appears in Ferry Building after the cheese
+       vendor's hint fires. Same effects as sourdough_bread. */
+    sourdough_bread_2: {
+      id: "sourdough_bread_2",
+      name: "second loaf of sourdough",
+      aliases: ["second bread", "second loaf", "bread", "sourdough", "loaf", "extra loaf"],
+      description:
+        "A second Boudin sourdough loaf, tucked under the counter. Also " +
+        "still warm.",
+      examine:
+        "Somehow this second loaf had been out of sight under the counter. " +
+        "The cheesemonger must have set it aside for you.",
+      portable: true,
+      weight: 1,
+      useAlone: {
+        message: "You tear off a piece and eat it. It's just as good as the first.",
+        consumesItem: false
+      },
+      useWith: {
+        old_fisherman: {
+          message:
+            "The old fisherman takes this loaf too, and chuckles. \"You're a " +
+            "generous one. But I've no more gifts.\"",
+          consumesItem: true
+        },
+        giant_sea_lion: {
+          message:
+            "You throw the bread to the sea lion. It swallows the loaf whole, " +
+            "grunts happily, and lumbers aside. The way south is open!",
+          consumesItem: true,
+          setsFlag: "sea_lion_appeased",
+          scoreEvent: "appeased_sea_lion"
+        }
+      }
+    },
+
+    ferry_token: {
+      id: "ferry_token",
+      name: "ferry token",
+      aliases: ["token", "brass token", "ferry coin"],
+      description:
+        "An old ferry fare token, embossed with a ferry.",
+      examine:
+        "A ferry token that looks to date from the 1930s. \"San Francisco — " +
+        "Oakland Ferry\" is still legible on its face. Meant for a turnstile.",
+      portable: true,
+      weight: 0
+    },
+
+    captains_log: {
+      id: "captains_log",
+      name: "captain's log",
+      aliases: ["log", "journal", "ship's log", "notebook", "ship log"],
+      description:
+        "An old leather-bound captain's log. The last page bears a cryptic note.",
+      examine:
+        "The last page reads: \"The lighthouse asks for three treasures. The " +
+        "record of the sea, the memory of the land, and the one that points " +
+        "the way. When three are gathered, the light will return.\"",
+      portable: true,
+      weight: 1
+    },
+
+    flashlight: {
+      id: "flashlight",
+      name: "small flashlight",
+      aliases: ["torch", "light", "lamp", "electric torch"],
+      description:
+        "A small but adequately bright flashlight. The batteries still hold.",
+      examine:
+        "A sturdy little metal flashlight. Flip the switch and it throws a " +
+        "warm beam. Just the thing for dark places.",
+      portable: true,
+      weight: 1,
+      isLightSource: true,
+      useAlone: {
+        message: "You click the flashlight on. A warm light fills the space around you.",
+        consumesItem: false,
+        setsFlag: "has_light"
+      }
+    },
+
+    brass_compass: {
+      id: "brass_compass",
+      name: "brass compass",
+      aliases: ["compass", "magnetic compass"],
+      description:
+        "A handsome brass compass. The needle rides true to north.",
+      examine:
+        "Finely-worked brass. Inside the cover, engraved: \"S.F. Harbor " +
+        "Master, 1906\" — the year of the great earthquake. The needle " +
+        "holds north without trembling.",
+      portable: true,
+      weight: 1
+    },
+
+    vintage_train_model: {
+      id: "vintage_train_model",
+      name: "vintage train model",
+      aliases: ["train model", "model", "train", "locomotive", "model train"],
+      description:
+        "A precise model of the old Belt Line Railroad that once ran the " +
+        "waterfront.",
+      examine:
+        "Remarkably detailed — 1920s Belt Line freight cars, the kind that " +
+        "worked the piers. On the base, carved small: \"Do not forget this " +
+        "place.\"",
+      portable: true,
+      weight: 1
+    },
+
+    cloth_map: {
+      id: "cloth_map",
+      name: "cloth map",
+      aliases: ["embroidered map", "stitched map", "cloth", "handmade map"],
+      description:
+        "A handmade embroidered cloth map of the Embarcadero.",
+      examine:
+        "A careful embroidery of the whole Embarcadero — Pier 39 at the " +
+        "north end, the lighthouse at the south, the major landmarks marked " +
+        "with sweet little stitched icons. On the reverse, stitched: \"All " +
+        "roads lead to the lighthouse.\"",
+      portable: true,
+      weight: 1,
+      useAlone: {
+        message:
+          "You unfold the map and check your position. The shape of the " +
+          "Embarcadero is easy to read at a glance.",
+        consumesItem: false,
+        showsMap: true
+      }
+    },
+
+    /* ---- Scenery (non-portable) ---- */
+
+    brass_telescope: {
+      id: "brass_telescope",
+      name: "brass telescope",
+      aliases: ["telescope", "scope", "viewing telescope"],
+      description: "An old brass tourist telescope, bolted to the railing. A coin slot.",
+      examine:
+        "Heavy brass, bolted to the railing. The slot is marked \"25¢\" but " +
+        "it looks like most coins would fit. The lens cover is shut.",
+      portable: false,
+      scenery: true
+    },
+
+    carved_plank: {
+      id: "carved_plank",
+      name: "carved wooden plank",
+      aliases: ["plank", "carving", "wooden plank", "carved plank"],
+      description: "A weather-beaten plank with carved letters.",
+      examine:
+        "The carving reads, roughly: \"Look far before you look near. Silver " +
+        "eyes don't lie.\"",
+      portable: false,
+      scenery: true
+    },
+
+    cupid_pedestal: {
+      id: "cupid_pedestal",
+      name: "sculpture pedestal",
+      aliases: ["pedestal", "base", "keyhole", "cupid base", "cupid pedestal"],
+      description:
+        "The stone pedestal of the sculpture, with a small keyhole in its side.",
+      examine:
+        "A slab of polished stone. The keyhole is ornate and oddly shaped.",
+      portable: false,
+      scenery: true
+    },
+
+    ballpark_gate: {
+      id: "ballpark_gate",
+      name: "ballpark gate",
+      aliases: ["gate", "padlock", "park gate", "front gate"],
+      description:
+        "An old-fashioned iron gate, chained with a heavy padlock.",
+      examine:
+        "Iron and chain. The padlock is big and forbidding — and its keyhole " +
+        "clearly isn't meant for the rusty key you found.",
+      portable: false,
+      scenery: true
+    },
+
+    stone_marker: {
+      id: "stone_marker",
+      name: "stone marker",
+      aliases: ["marker", "stone", "carved stone", "inscription"],
+      description: "An old stone marker at the lighthouse's foot.",
+      examine:
+        "Carved into the stone: \"Three offerings open the light — the sea's " +
+        "record, the land's memory, the one that points the way.\"",
+      portable: false,
+      scenery: true
+    },
+
+    lighthouse_door: {
+      id: "lighthouse_door",
+      name: "lighthouse door",
+      aliases: ["door", "lighthouse"],
+      description: "The door of the small lighthouse stands ajar.",
+      examine:
+        "The door is weathered, wooden, and not latched. You could step inside. " +
+        "(Try: ENTER INSIDE)",
+      portable: false,
+      scenery: true
+    },
+
+    willie_mays_statue: {
+      id: "willie_mays_statue",
+      name: "Willie Mays statue",
+      aliases: ["statue", "willie mays", "bronze statue", "mays"],
+      description: "A bronze Willie Mays, caught in the middle of a legendary catch.",
+      examine:
+        "The Say Hey Kid, arms aloft, glove extended, forever running down " +
+        "a ball somewhere in center field.",
+      portable: false,
+      scenery: true
+    },
+
+    display_case: {
+      id: "display_case",
+      name: "display case",
+      aliases: ["case", "ferry history case", "exhibit"],
+      description:
+        "An old glass display case with notes on the Ferry Building's history.",
+      examine:
+        "Old photographs and captions from the Ferry's golden age. Tucked in " +
+        "one corner, almost forgotten, a single ferry token.",
+      portable: false,
+      scenery: true
+    },
+
+    cupid_mosaic: {
+      id: "cupid_mosaic",
+      name: "Cupid mosaic",
+      aliases: ["mosaic", "tile mosaic", "tiles", "cupid tiles"],
+      description: "A tiled mosaic of Cupid set into the park's floor.",
+      examine:
+        "Blue and gold tiles form a Cupid with a bow. The colors are bright " +
+        "beneath your feet.",
+      portable: false,
+      scenery: true
+    },
+
+    bay_bridge: {
+      id: "bay_bridge",
+      name: "Bay Bridge",
+      aliases: ["bridge", "bay bridge", "the bridge"],
+      description: "The Bay Bridge — its huge piers soar overhead.",
+      examine:
+        "Steel and shadow. The lower deck hums with traffic you cannot see.",
+      portable: false,
+      scenery: true
+    }
+  },
+
+  /* ======================================================================
+     NPCs
+     ====================================================================== */
+  npcs: {
+
+    street_performer: {
+      id: "street_performer",
+      name: "silver-painted street performer",
+      aliases: ["street performer", "performer", "silver man", "statue man",
+                "silver performer", "living statue"],
+      description:
+        "A street performer painted head to toe in silver, holding a perfect " +
+        "statuesque stillness.",
+      dialogue: {
+        default:
+          "The silver performer doesn't move. But when you speak, one eye winks. " +
+          "He whispers: \"Look out from the deck above. Silver eyes don't lie.\" " +
+          "Then he is stone again.",
+        after_telescope:
+          "The silver performer smiles faintly. \"You saw, didn't you? What was " +
+          "hidden.\""
+      },
+      dialogueFlagKey: "telescope_clue",
+      dialogueFlagMap: { "true": "after_telescope", "false": "default" },
+      interactions: {
+        "give silver_coin": {
+          message:
+            "The performer glances at the coin but gently shakes his head. \"You " +
+            "will need that elsewhere. Keep it safe.\" The coin is returned.",
+          consumesItem: false
+        },
+        "attack": {
+          message:
+            "You swing — and he dodges with startling speed. Without so much as a " +
+            "word he resumes his pose, one eye on you.",
+          hostile: false
+        }
+      }
+    },
+
+    old_fisherman: {
+      id: "old_fisherman",
+      name: "old fisherman",
+      aliases: ["fisherman", "old man", "fisher", "angler"],
+      description:
+        "A sunbrowned old man sits at the end of the pier, line in the water.",
+      dialogue: {
+        default:
+          "The old fisherman speaks without looking up. \"Been fishing here fifty " +
+          "years. There's nothing about this bay I don't know. ...I'm getting " +
+          "hungry, though. I'd kill for some of that famous sourdough.\"",
+        after_trade:
+          "\"That was a fine loaf. Thanks kindly. Watch yourself in the dark " +
+          "places — there's old tunnels under all this, you know.\"",
+        "ask about lighthouse":
+          "\"The lighthouse at the southern tip? There's an old tale — three " +
+          "offerings laid at the light, and the bay glows again. Old wives' " +
+          "story, mostly.\"",
+        "ask about hidden dock":
+          "\"Ah, that old dock below Pier 7. Smugglers used it once. Nobody goes " +
+          "there any more.\"",
+        "ask about train":
+          "\"The Belt Line Railroad ran freight all down the piers once. They " +
+          "tore up the tracks decades ago — but the tunnels are still there.\""
+      },
+      dialogueFlagKey: "fisherman_traded",
+      dialogueFlagMap: { "true": "after_trade", "false": "default" },
+      interactions: {
+        "give sourdough_bread": {
+          message:
+            "The old fisherman's eyes light up. \"Oh, now! That's the stuff.\" He " +
+            "takes the bread and fishes a small flashlight from a coat pocket. " +
+            "\"Repayment. Use it in dark places.\"",
+          consumesItem: true,
+          grantsItem: "flashlight",
+          setsFlag: "fisherman_traded",
+          scoreEvent: "traded_with_fisherman"
+        },
+        "give sourdough_bread_2": {
+          message:
+            "The old fisherman takes this second loaf and laughs. \"You're a " +
+            "generous one. But I've no more gifts for you.\"",
+          consumesItem: true
+        },
+        "attack": {
+          message: "The old fisherman raps your hand with his rod. \"Don't be a fool.\"",
+          hostile: false
+        }
+      }
+    },
+
+    cheese_vendor: {
+      id: "cheese_vendor",
+      name: "cheesemonger",
+      aliases: ["cheese vendor", "cheesemonger", "woman", "vendor", "cheese woman",
+                "shopkeeper"],
+      description:
+        "A cheesemonger in a white apron, offering samples from her counter.",
+      dialogue: {
+        default:
+          "\"Welcome! Care to try some Cowgirl Creamery? By the way — have you " +
+          "been up to the balcony yet? Something interesting up there. Look " +
+          "closely at the display case.\"",
+        after_fisherman:
+          "\"I saw you share a loaf with the old fisherman. That was kind. Here — " +
+          "there's a second loaf I set aside under the bread counter. Take a " +
+          "closer look; it should still be there if you need it.\""
+      },
+      dialogueFlagKey: "fisherman_traded",
+      dialogueFlagMap: { "true": "after_fisherman", "false": "default" },
+      onDialogue: {
+        after_fisherman: { setFlag: "second_bread_hint" }
+      },
+      interactions: {
+        "ask about balcony":
+          "\"Yes, go up to the second floor. The display case has a nice little " +
+          "exhibit. And — I think something's been forgotten in the corner of it.\"",
+        "ask about bread":
+          "\"Best sourdough on the coast. From the bakery downstairs.\"",
+        "ask about lighthouse":
+          "\"That little lighthouse south of the ballpark? There's a poem carved " +
+          "on its base. Worth reading.\"",
+        "attack": {
+          message:
+            "The cheesemonger hefts her enormous wire-cheese cutter and smiles. " +
+            "\"I wouldn't.\" You reconsider.",
+          hostile: false
+        }
+      }
+    },
+
+    giant_sea_lion: {
+      id: "giant_sea_lion",
+      name: "giant sea lion",
+      aliases: ["sea lion", "sealion", "lion", "pinniped", "seal"],
+      description:
+        "A vast sea lion sprawled across the path, more than two meters of it.",
+      dialogue: {
+        default:
+          "The sea lion looks up with wet black eyes and barks a dissatisfied " +
+          "\"AROOH!\". It appears to be hungry.",
+        after_fed:
+          "The sea lion rolls contentedly onto its side. It looks positively sweet."
+      },
+      dialogueFlagKey: "sea_lion_appeased",
+      dialogueFlagMap: { "true": "after_fed", "false": "default" },
+      blocking: true,
+      blocksExit: "south",
+      interactions: {
+        "give sourdough_bread": {
+          message:
+            "You hold out the bread. The sea lion's nose twitches — and it " +
+            "swallows the whole loaf in one bite. It barks happily and " +
+            "lumbers to the side of the path. The way south is open!",
+          consumesItem: true,
+          setsFlag: "sea_lion_appeased",
+          scoreEvent: "appeased_sea_lion"
+        },
+        "give sourdough_bread_2": {
+          message:
+            "You hold out the second loaf. One bite, swallow, bark — and the " +
+            "sea lion hauls itself aside. The way south is open!",
+          consumesItem: true,
+          setsFlag: "sea_lion_appeased",
+          scoreEvent: "appeased_sea_lion"
+        },
+        "attack": {
+          message:
+            "Attack the sea lion? Seriously? Three hundred kilos of sea beast? " +
+            "As expected, it roars and slams into you. You land on your back " +
+            "three meters down the path.",
+          hostile: false
+        },
+        "pet": {
+          message:
+            "Surprisingly, the sea lion tolerates a pat. But it still has no " +
+            "intention of moving. It's probably hungry.",
+          consumesItem: false
+        }
+      }
+    },
+
+    jogger_npc: {
+      id: "jogger_npc",
+      name: "jogger",
+      aliases: ["jogger", "runner", "woman jogging", "jogging woman", "running woman"],
+      description:
+        "A jogger with earbuds in, pausing mid-stretch.",
+      dialogue: {
+        default:
+          "She pops out an earbud. \"Favorite running route of mine. Did you know " +
+          "there's a little lighthouse beyond the ballpark? Bring a compass, " +
+          "though — the fog gets thick on the rocks and people lose their way.\"",
+        "ask about lighthouse":
+          "\"The lighthouse? Yeah, it's down past the ballpark. On foggy days the " +
+          "path can be confusing — better to have a bearing and some kind of map.\"",
+        "ask about fog":
+          "\"The fog rolls in fast here. Always have a compass.\""
+      },
+      interactions: {
+        "attack": {
+          message:
+            "She steps back lightly and gives you a cold look. \"I'll call the " +
+            "cops.\" You pretend nothing happened.",
+          hostile: false
+        }
+      }
+    }
+  },
+
+  /* ======================================================================
+     SCORE EVENTS — each at most once. Totals to 100.
+     ====================================================================== */
+  scoreEvents: {
+    used_telescope:        10,
+    found_hidden_dock:      5,
+    traded_with_fisherman: 10,
+    appeased_sea_lion:     10,
+    opened_cupid_base:     15,
+    explored_underground:   5,
+    used_chart_compass:    10,
+    reached_lighthouse:    10,
+    completed_game:        25
+  },
+
+  /* ======================================================================
+     HINT CHAIN — the player's HINT command escalates (nudge → push → shove)
+     through the first entry whose `when(state)` evaluates true.
+     ====================================================================== */
+  hints: {
+    chain: [
+      {
+        id: "get_coin",
+        when: (S) =>
+          !S.scoredEvents.used_telescope &&
+          !S.inventory.includes("silver_coin") &&
+          !S.flags.telescope_clue,
+        nudge: "Something glints at your feet at Pier 39.",
+        push:  "Pick up the coin. It may fit a coin-operated machine somewhere high up.",
+        shove: "TAKE COIN, go UP to the deck, then USE COIN ON TELESCOPE."
+      },
+      {
+        id: "use_telescope",
+        when: (S) => S.inventory.includes("silver_coin") && !S.flags.telescope_clue,
+        nudge: "The deck above Pier 39 has a view-finder that wants a coin.",
+        push:  "USE COIN ON TELESCOPE — see what you notice.",
+        shove: "Go up to the observation deck and USE SILVER COIN ON BRASS TELESCOPE."
+      },
+      {
+        id: "reach_hidden_dock",
+        when: (S) => S.flags.telescope_clue && !S.roomStates.hidden_dock.visited,
+        nudge: "You saw something hidden from the deck — go look for it.",
+        push:  "From Pier 7, the west side of the railing was suggestive.",
+        shove: "From the Pier 7 promenade, go WEST over the railing."
+      },
+      {
+        id: "open_cupid",
+        when: (S) =>
+          S.inventory.includes("rusty_key") &&
+          !S.flags.base_opened,
+        nudge: "There's a keyhole somewhere south of the Ferry Building.",
+        push:  "The Cupid sculpture's base has a keyhole. Try the key.",
+        shove: "At Cupid's Span: USE RUSTY KEY ON PEDESTAL."
+      },
+      {
+        id: "appease_sea_lion",
+        when: (S) => !S.flags.sea_lion_appeased &&
+                     (S.inventory.includes("sourdough_bread") ||
+                      S.inventory.includes("sourdough_bread_2")),
+        nudge: "The sea lion is hungry.",
+        push:  "Give it something from the Ferry Building bakery.",
+        shove: "GIVE BREAD TO SEA LION."
+      },
+      {
+        id: "two_breads",
+        when: (S) => S.flags.fisherman_traded && !S.flags.sea_lion_appeased &&
+                     !S.inventory.includes("sourdough_bread") &&
+                     !S.inventory.includes("sourdough_bread_2"),
+        nudge: "You only had one loaf — and you gave it away. Ask around inside.",
+        push:  "The cheesemonger noticed what you did, and has a note for you now.",
+        shove: "TALK TO CHEESEMONGER again. Then go back and look at the counter."
+      },
+      {
+        id: "trade_fisherman",
+        when: (S) => !S.flags.fisherman_traded &&
+                     S.inventory.includes("sourdough_bread"),
+        nudge: "Someone on Pier 7 mentioned being hungry.",
+        push:  "The old fisherman wants some of that sourdough.",
+        shove: "GIVE BREAD TO FISHERMAN — he'll thank you properly."
+      },
+      {
+        id: "light_underground",
+        when: (S) => S.roomStates.underground_passage.visited &&
+                     !S.inventory.includes("flashlight"),
+        nudge: "You'll need a light to travel the underground passage.",
+        push:  "The old fisherman offered something useful in dark places — if he's fed.",
+        shove: "GIVE BREAD TO FISHERMAN to get a flashlight."
+      },
+      {
+        id: "chart_compass",
+        when: (S) => S.inventory.includes("old_nautical_chart") &&
+                     S.inventory.includes("brass_compass") &&
+                     !S.flags.chart_compass_combined,
+        nudge: "You have two pieces that work better together.",
+        push:  "A chart without a bearing is hard to follow.",
+        shove: "USE CHART ON COMPASS (or compass on chart)."
+      },
+      {
+        id: "go_south_from_ballpark",
+        when: (S) => S.roomStates.ballpark_entrance.visited &&
+                     !S.roomStates.lighthouse_point.visited &&
+                     S.inventory.includes("brass_compass") &&
+                     S.inventory.includes("old_nautical_chart"),
+        nudge: "With compass and chart, the foggy path south is possible now.",
+        push:  "Go south from the ballpark entrance.",
+        shove: "From the ballpark: S. Compass and chart will guide you."
+      },
+      {
+        id: "finale",
+        when: (S) => S.roomStates.lighthouse_point.visited && !S.flags.game_won,
+        nudge: "The lighthouse wants three things from you.",
+        push:  "Read the captain's log. It names three treasures.",
+        shove: "Carry the captain's log, the train model, and the brass compass, " +
+               "and then ENTER INSIDE the lighthouse."
+      }
+    ],
+    fallback: [
+      "Try LOOK and EXAMINE everything carefully.",
+      "Talk to people. ASK them ABOUT things you've seen.",
+      "Two items may be more useful combined than apart."
+    ]
+  },
+
+  /* ======================================================================
+     SPAWNS — when a flag flips true, drop the item into the named room,
+     optionally with an announcement.
+     ====================================================================== */
+  spawns: {
+    second_bread_hint: [
+      {
+        room: "ferry_building_interior",
+        item: "sourdough_bread_2",
+        announce: "(You notice a second loaf, tucked almost out of sight under the " +
+                  "bread counter.)"
+      }
+    ]
+  },
+
+  /* ======================================================================
+     ENDINGS — fire when flags (or allFlags) match. The interaction that
+     sets `game_won` already plays the finale; this ending only marks
+     the game as over so the loop freezes.
+     ====================================================================== */
+  endings: {
+    win: { flag: "game_won", win: true }
+  }
+};
+
+window.__loaded_world = true;
+}catch(e){window.__err_world = (e&&e.stack)||String(e);}</script>
+  <script>try{
+/* ==========================================================================
+   engine.js — Parser, resolver, state manager, renderer, game loop.
+
+   Data-driven: all room/item/NPC/score/hint data lives in world.js; all
+   long-form prose lives in content.js. The engine never hard-codes world
+   content. To add rooms, items, NPCs: edit world.js + content.js only.
+   ========================================================================== */
+
+(function () {
+  "use strict";
+
+  /* ------------------------------------------------------------------ */
+  /*  Constants & tables                                                 */
+  /* ------------------------------------------------------------------ */
+
+  const DIRECTIONS = {
+    n: "north", s: "south", e: "east", w: "west",
+    ne: "northeast", nw: "northwest", se: "southeast", sw: "southwest",
+    u: "up", d: "down",
+    north: "north", south: "south", east: "east", west: "west",
+    northeast: "northeast", northwest: "northwest",
+    southeast: "southeast", southwest: "southwest",
+    up: "up", down: "down",
+    in: "inside", inside: "inside", into: "inside",
+    out: "outside", outside: "outside"
+  };
+
+  const VERB_SYNONYMS = {
+    // movement
+    "go": "GO", "walk": "GO", "move": "GO", "head": "GO",
+    "travel": "GO", "run": "GO", "proceed": "GO", "continue": "GO",
+    "enter": "GO", "exit": "GO", "leave": "GO",
+
+    // take
+    "take": "TAKE", "get": "TAKE", "grab": "TAKE", "pickup": "TAKE",
+    "acquire": "TAKE", "snag": "TAKE", "collect": "TAKE", "pocket": "TAKE",
+
+    // drop
+    "drop": "DROP", "discard": "DROP", "toss": "DROP", "throw": "DROP",
+    "putdown": "DROP", "setdown": "DROP", "place": "DROP",
+
+    // look
+    "look": "LOOK", "l": "LOOK", "examine": "LOOK", "x": "LOOK",
+    "inspect": "LOOK", "check": "LOOK", "study": "LOOK",
+    "observe": "LOOK", "read": "LOOK", "peer": "LOOK", "search": "LOOK",
+
+    // use
+    "use": "USE", "apply": "USE", "insert": "USE",
+    "activate": "USE", "flip": "USE", "press": "USE", "turnon": "USE",
+
+    // give
+    "give": "GIVE", "offer": "GIVE", "hand": "GIVE", "trade": "GIVE",
+    "show": "GIVE", "present": "GIVE", "feed": "GIVE",
+
+    // talk
+    "talk": "TALK", "speak": "TALK", "ask": "TALK", "say": "TALK",
+    "chat": "TALK", "tell": "TALK", "greet": "TALK", "yell": "TALK",
+    "shout": "TALK",
+
+    // open
+    "open": "OPEN", "unlock": "OPEN", "pry": "OPEN", "force": "OPEN",
+
+    // attack / pet
+    "attack": "ATTACK", "hit": "ATTACK", "fight": "ATTACK",
+    "punch": "ATTACK", "kick": "ATTACK", "strike": "ATTACK", "break": "ATTACK",
+    "pet": "PET", "stroke": "PET",
+
+    // meta
+    "inventory": "INVENTORY", "i": "INVENTORY", "inv": "INVENTORY",
+    "items": "INVENTORY",
+    "help": "HELP", "hint": "HINT",
+    "wait": "WAIT", "z": "WAIT",
+    "save": "SAVE", "load": "LOAD", "restore": "LOAD", "saves": "SAVES",
+    "score": "SCORE", "points": "SCORE",
+    "quit": "QUIT", "restart": "RESTART",
+    "undo": "UNDO", "again": "AGAIN", "g": "AGAIN",
+    "map": "MAP",
+
+    // easter-egg / atmosphere
+    "sing": "_SING", "dance": "_DANCE", "pray": "_PRAY",
+    "swim": "_SWIM", "jump": "_JUMP", "fly": "_FLY",
+    "scream": "_SCREAM", "sleep": "_SLEEP", "eat": "_EAT",
+    "hello": "_HELLO", "hi": "_HELLO",
+    "diagnose": "_DIAGNOSE",
+    "xyzzy": "_XYZZY", "plugh": "_PLUGH", "plover": "_PLOVER"
+  };
+
+  // Multi-word verb phrases collapsed before tokenization.
+  const MULTIWORD_VERBS = [
+    ["pick up", "pickup"],
+    ["put down", "putdown"],
+    ["set down", "setdown"],
+    ["turn on", "turnon"],
+    ["look at", "look"],
+    ["look in", "look"],
+    ["look under", "look"],
+    ["what do i have", "inventory"],
+    ["check pockets", "inventory"],
+    ["what do i do", "help"],
+    ["go inside", "enter inside"],
+    ["go in", "enter inside"]
+  ];
+
+  const PREPOSITIONS = [
+    "on", "at", "to", "with", "into", "in",
+    "from", "about", "through", "under", "behind", "over"
+  ];
+
+  const ARTICLES = ["the", "a", "an", "some", "my"];
+
+  const CONTRACTIONS = {
+    "don't": "do not", "can't": "cannot", "won't": "will not",
+    "it's": "it is", "i'm": "i am", "i've": "i have",
+    "you're": "you are", "that's": "that is", "isn't": "is not",
+    "doesn't": "does not", "didn't": "did not"
+  };
+
+  const PROFANITY = [
+    "fuck", "shit", "damn", "bitch", "asshole", "hell", "crap"
+  ];
+
+  /* ------------------------------------------------------------------ */
+  /*  State                                                              */
+  /* ------------------------------------------------------------------ */
+
+  const W = window.WORLD;
+  const C = window.CONTENT;
+
+  let STATE = null;
+  let PREV_STATE = null;
+  let LAST_COMMAND = null;
+  let FAILURE_CURSORS = {};
+
+  /* Typewriter */
+  const TYPE_DELAY = 12;              // ms per character
+  const PRINT_QUEUE = [];
+  let TYPING = false;
+  let SKIP_ALL = false;
+
+  /* Save slots */
+  const SAVE_SLOTS = ["1", "2", "3"];
+  const DEFAULT_SLOT = "1";
+
+  function freshState() {
+    const roomStates = {};
+    for (const rid of Object.keys(W.rooms)) {
+      const r = W.rooms[rid];
+      roomStates[rid] = {
+        visited: false,
+        items: Array.isArray(r.items) ? [...r.items] : [],
+        npcs: Array.isArray(r.npcs) ? [...r.npcs] : [],
+        flags: Object.assign({}, r.flags || {})
+      };
+    }
+    return {
+      currentRoom: W.meta.startRoom,
+      previousRoom: null,
+      inventory: [],
+      score: 0,
+      maxScore: computeMaxScore(),
+      moves: 0,
+      flags: {},
+      scoredEvents: {},
+      hintLevel: {},
+      talkCount: {},
+      spawned: {},
+      roomStates,
+      history: []
+    };
+  }
+
+  function computeMaxScore() {
+    let sum = 0;
+    for (const k in (W.scoreEvents || {})) sum += W.scoreEvents[k];
+    return sum || W.meta.maxScore || 0;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  DOM hooks                                                          */
+  /* ------------------------------------------------------------------ */
+
+  const outEl = document.getElementById("output");
+  const inputEl = document.getElementById("input");
+  const formEl = document.getElementById("input-form");
+  const scoreEl = document.getElementById("score");
+  const maxScoreEl = document.getElementById("max-score");
+  const movesEl = document.getElementById("moves");
+
+  function escHTML(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+  function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+  /* ------------------------------------------------------------------ */
+  /*  Typewriter-aware output                                            */
+  /* ------------------------------------------------------------------ */
+
+  function enqueuePrint(html, cls) {
+    PRINT_QUEUE.push({ html, cls, instant: false });
+    if (!TYPING) drainQueue();
+  }
+  function enqueuePrintInstant(html, cls) {
+    PRINT_QUEUE.push({ html, cls, instant: true });
+    if (!TYPING) drainQueue();
+  }
+  function drainQueue() {
+    if (!PRINT_QUEUE.length) { TYPING = false; SKIP_ALL = false; return; }
+    TYPING = true;
+    const job = PRINT_QUEUE.shift();
+    if (job.instant || SKIP_ALL) {
+      renderInstant(job.html, job.cls);
+      drainQueue();
+    } else {
+      typewriteLine(job.html, job.cls, drainQueue);
+    }
+  }
+  function renderInstant(html, cls) {
+    const div = document.createElement("div");
+    div.className = "line" + (cls ? " " + cls : "");
+    div.innerHTML = html;
+    outEl.appendChild(div);
+    outEl.scrollTop = outEl.scrollHeight;
+  }
+  function typewriteLine(html, cls, done) {
+    const div = document.createElement("div");
+    div.className = "line typing" + (cls ? " " + cls : "");
+    div.innerHTML = html;
+    outEl.appendChild(div);
+
+    const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    let n;
+    while ((n = walker.nextNode())) {
+      nodes.push({ node: n, full: n.textContent });
+      n.textContent = "";
+    }
+    if (!nodes.length) { div.classList.remove("typing"); done(); return; }
+
+    let i = 0, j = 0;
+    function finishAll() {
+      for (const nd of nodes) nd.node.textContent = nd.full;
+      div.classList.remove("typing");
+      outEl.scrollTop = outEl.scrollHeight;
+      done();
+    }
+    function step() {
+      if (SKIP_ALL) { finishAll(); return; }
+      if (i >= nodes.length) { div.classList.remove("typing"); done(); return; }
+      const cur = nodes[i];
+      if (j >= cur.full.length) { i++; j = 0; step(); return; }
+      cur.node.textContent += cur.full[j++];
+      outEl.scrollTop = outEl.scrollHeight;
+      setTimeout(step, TYPE_DELAY);
+    }
+    step();
+  }
+
+  function print(text, cls) {
+    const lines = String(text).split(/\n/);
+    for (const ln of lines) enqueuePrint(escHTML(ln), cls);
+  }
+  function printInstant(text, cls) {
+    const lines = String(text).split(/\n/);
+    for (const ln of lines) enqueuePrintInstant(escHTML(ln), cls);
+  }
+  function printRaw(html, cls) { enqueuePrint(html, cls); }
+  function printEcho(cmd) { enqueuePrintInstant(escHTML(cmd), "echo"); }
+  function printRoomName(name) { enqueuePrint(escHTML(name), "room-name"); }
+  function printRoomDesc(text) {
+    let html = escHTML(text);
+    const rs = currentRoomState();
+    const itemIds = (rs && rs.items) || [];
+    const npcIds = (rs && rs.npcs) || [];
+    for (const iid of itemIds) {
+      const it = W.items[iid]; if (!it) continue;
+      const names = [it.name].concat(it.aliases || []);
+      for (const nm of names) {
+        const pat = new RegExp("\\b(" + escapeRegex(nm) + ")\\b", "i");
+        html = html.replace(pat, '<span class="item-word">$1</span>');
+      }
+    }
+    for (const nid of npcIds) {
+      const np = W.npcs[nid]; if (!np) continue;
+      const names = [np.name].concat(np.aliases || []);
+      for (const nm of names) {
+        const pat = new RegExp("\\b(" + escapeRegex(nm) + ")\\b", "i");
+        html = html.replace(pat, '<span class="npc-word">$1</span>');
+      }
+    }
+    const parts = html.split(/\n/);
+    for (const p of parts) enqueuePrint(p, "room-desc");
+  }
+  function updateHUD() {
+    scoreEl.textContent = STATE.score;
+    maxScoreEl.textContent = STATE.maxScore;
+    movesEl.textContent = STATE.moves;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Pool cycler                                                        */
+  /* ------------------------------------------------------------------ */
+
+  function pool(name, subs) {
+    const arr = C.pools[name] || [];
+    if (!arr.length) return "";
+    const i = (FAILURE_CURSORS[name] || 0) % arr.length;
+    FAILURE_CURSORS[name] = i + 1;
+    let s = arr[i];
+    if (subs) {
+      for (const k in subs) s = s.replace(new RegExp("\\{" + k + "\\}", "g"), subs[k]);
+    }
+    return s;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Fuzzy matching (Levenshtein)                                       */
+  /* ------------------------------------------------------------------ */
+
+  function levenshtein(a, b) {
+    const m = a.length, n = b.length;
+    if (!m) return n;
+    if (!n) return m;
+    const dp = new Array(n + 1);
+    for (let j = 0; j <= n; j++) dp[j] = j;
+    for (let i = 1; i <= m; i++) {
+      let prev = dp[0]; dp[0] = i;
+      for (let j = 1; j <= n; j++) {
+        const tmp = dp[j];
+        dp[j] = Math.min(
+          dp[j] + 1,
+          dp[j - 1] + 1,
+          prev + (a[i - 1] === b[j - 1] ? 0 : 1)
+        );
+        prev = tmp;
+      }
+    }
+    return dp[n];
+  }
+
+  function fuzzyBest(word, candidates) {
+    if (!word || word.length < 4) return null;
+    let best = null, bestD = 3; // distance <= 2
+    for (const c of candidates) {
+      if (!c || c.length < 3) continue;
+      const d = levenshtein(word, c);
+      if (d < bestD || (d === bestD && c.length < (best || "").length)) {
+        best = c; bestD = d;
+      }
+    }
+    return bestD <= 2 ? best : null;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Parser                                                             */
+  /* ------------------------------------------------------------------ */
+
+  function normalize(raw) {
+    let s = (raw || "").toLowerCase().trim();
+    if (!s) return "";
+    s = s.replace(/[.!?,;:"()]/g, " ");
+    for (const k in CONTRACTIONS) {
+      s = s.replace(new RegExp("\\b" + escapeRegex(k) + "\\b", "g"), CONTRACTIONS[k]);
+    }
+    s = s.replace(/\s+/g, " ").trim();
+    for (const [phrase, token] of MULTIWORD_VERBS) {
+      s = s.replace(new RegExp("\\b" + escapeRegex(phrase) + "\\b", "g"), token);
+    }
+    return s;
+  }
+
+  function stripArticles(tokens) {
+    return tokens.filter(t => !ARTICLES.includes(t));
+  }
+  function isDirectionToken(tok) {
+    return Object.prototype.hasOwnProperty.call(DIRECTIONS, tok);
+  }
+
+  function parse(raw) {
+    const norm = normalize(raw);
+    if (!norm) return { verb: null, empty: true };
+
+    for (const w of PROFANITY) {
+      if (norm.split(/\s+/).includes(w)) return { verb: "_PROFANITY" };
+    }
+
+    let tokens = stripArticles(norm.split(/\s+/));
+    if (!tokens.length) return { verb: null, empty: true };
+
+    // Bare direction
+    if (tokens.length === 1 && isDirectionToken(tokens[0])) {
+      return { verb: "GO", direction: DIRECTIONS[tokens[0]] };
+    }
+
+    const head = tokens[0];
+    let verb = VERB_SYNONYMS[head] || null;
+    let verbWordUsed = head;
+
+    // Fuzzy verb
+    if (!verb) {
+      const match = fuzzyBest(head, Object.keys(VERB_SYNONYMS));
+      if (match) {
+        verb = VERB_SYNONYMS[match];
+        verbWordUsed = match;
+        print("(Assuming: " + match + ")", "system");
+      }
+    }
+
+    const rest = tokens.slice(1);
+
+    if (verb === "GO") {
+      if (rest.length === 0) return { verb: "GO", direction: null };
+      const dirTok = rest[0];
+      if (isDirectionToken(dirTok)) return { verb: "GO", direction: DIRECTIONS[dirTok] };
+      // "enter inside" → direction: inside
+      const joined = rest.join(" ");
+      if (isDirectionToken(joined)) return { verb: "GO", direction: DIRECTIONS[joined] };
+      return { verb: "GO", direction: null, stray: joined };
+    }
+
+    if (!verb) {
+      return { verb: "_UNKNOWN", word: head };
+    }
+
+    // Split by preposition
+    let prepIdx = -1, prepWord = null;
+    for (let i = 0; i < rest.length; i++) {
+      if (PREPOSITIONS.includes(rest[i])) { prepIdx = i; prepWord = rest[i]; break; }
+    }
+
+    let directRaw, indirectRaw = null;
+    if (prepIdx >= 0) {
+      directRaw = rest.slice(0, prepIdx).join(" ").trim();
+      indirectRaw = rest.slice(prepIdx + 1).join(" ").trim();
+    } else {
+      directRaw = rest.join(" ").trim();
+    }
+
+    if (!directRaw && indirectRaw) {
+      directRaw = indirectRaw;
+      indirectRaw = null;
+    }
+
+    return {
+      verb,
+      direct: directRaw || null,
+      indirect: indirectRaw || null,
+      prep: prepWord,
+      rawRest: rest.join(" ")
+    };
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  World queries                                                      */
+  /* ------------------------------------------------------------------ */
+
+  function currentRoom() { return W.rooms[STATE.currentRoom]; }
+  function currentRoomState() { return STATE.roomStates[STATE.currentRoom]; }
+
+  function accessibleEntityIds() {
+    const ids = new Set();
+    for (const id of STATE.inventory) ids.add(id);
+    const rs = currentRoomState();
+    for (const id of rs.items) ids.add(id);
+    for (const id of rs.npcs) ids.add(id);
+    // scenery in room description via room.scenery list (optional)
+    const r = currentRoom();
+    if (r && Array.isArray(r.scenery)) for (const id of r.scenery) ids.add(id);
+    return Array.from(ids);
+  }
+
+  function entityById(id) { return W.items[id] || W.npcs[id] || null; }
+
+  function resolveNoun(phrase, opts) {
+    opts = opts || {};
+    if (!phrase) return { notFound: true };
+    const want = phrase.toLowerCase();
+
+    const pools = [];
+    if (opts.inventoryOnly) {
+      pools.push({ ids: STATE.inventory, where: "inv" });
+    } else {
+      pools.push({ ids: STATE.inventory, where: "inv" });
+      pools.push({ ids: currentRoomState().items, where: "room" });
+      pools.push({ ids: currentRoomState().npcs, where: "npc" });
+      // room scenery
+      const r = currentRoom();
+      if (r && Array.isArray(r.scenery)) pools.push({ ids: r.scenery, where: "scenery" });
+    }
+
+    const matches = [];
+    const matchedIds = new Set();
+
+    for (const p of pools) {
+      for (const id of p.ids) {
+        const e = entityById(id);
+        if (!e) continue;
+        const names = [e.name].concat(e.aliases || []);
+        for (const nm of names) {
+          const ln = nm.toLowerCase();
+          if (
+            ln === want ||
+            ln.split(/\s+/).includes(want) ||
+            want.split(/\s+/).every(w => ln.includes(w))
+          ) {
+            if (!matchedIds.has(id)) {
+              matches.push({ id, where: p.where });
+              matchedIds.add(id);
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    if (matches.length === 1) return { id: matches[0].id, where: matches[0].where };
+    if (matches.length > 1) return { ambiguous: matches.map(m => m.id) };
+
+    // Fuzzy against accessible entity aliases/names
+    const candidates = [];
+    const idByCand = {};
+    for (const id of accessibleEntityIds()) {
+      const e = entityById(id); if (!e) continue;
+      const names = [e.name].concat(e.aliases || []).map(n => n.toLowerCase());
+      for (const nm of names) {
+        for (const tok of nm.split(/\s+/)) {
+          if (tok.length >= 4) { candidates.push(tok); idByCand[tok] = id; }
+        }
+        candidates.push(nm); idByCand[nm] = id;
+      }
+    }
+    const fz = fuzzyBest(want, candidates);
+    if (fz && idByCand[fz]) {
+      return { id: idByCand[fz], where: "fuzzy", fuzzy: fz };
+    }
+
+    // Global check — does entity exist at all, just not here?
+    const globalMatch = findGlobalEntity(want);
+    if (globalMatch) return { notHere: true, id: globalMatch };
+    return { notFound: true };
+  }
+
+  function findGlobalEntity(want) {
+    for (const id in W.items) {
+      const e = W.items[id];
+      const names = [e.name].concat(e.aliases || []).map(n => n.toLowerCase());
+      if (names.includes(want) || names.some(n => n.split(/\s+/).includes(want))) return id;
+    }
+    for (const id in W.npcs) {
+      const e = W.npcs[id];
+      const names = [e.name].concat(e.aliases || []).map(n => n.toLowerCase());
+      if (names.includes(want) || names.some(n => n.split(/\s+/).includes(want))) return id;
+    }
+    return null;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Darkness & light                                                   */
+  /* ------------------------------------------------------------------ */
+
+  function evaluateDarkness() {
+    const room = currentRoom();
+    if (!room) return false;
+    if (room.dark === true) return true;
+    if (room.flags && room.flags.dark) return true;
+    return false;
+  }
+  function playerHasLight() {
+    for (const id of STATE.inventory) {
+      const it = W.items[id];
+      if (it && (it.isLight || it.isLightSource)) return true;
+    }
+    return false;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Room rendering                                                     */
+  /* ------------------------------------------------------------------ */
+
+  function renderRoom(forceFull) {
+    const room = currentRoom();
+    const rs = currentRoomState();
+    if (!room) { print("[Missing room: " + STATE.currentRoom + "]", "error"); return; }
+
+    const isDark = evaluateDarkness();
+    const lit = playerHasLight();
+
+    if (isDark && !lit) {
+      printRoomName(room.name + " (dark)");
+      printRoomDesc(room.descriptions.dark || pool("dark"));
+      // No item list, no NPC list, no exits in the dark.
+      // Allow exits labeled with `alwaysVisible: true` (e.g., the way back up)
+      const exitDirs = Object.keys(room.exits || {}).filter(d => {
+        const ex = room.exits[d];
+        return ex && ex.alwaysVisible;
+      });
+      if (exitDirs.length) printInstant("Exits: " + exitDirs.join(", ") + ".", "system");
+      return;
+    }
+
+    printRoomName(room.name);
+
+    let desc;
+    if (isDark && lit && room.descriptions.with_light) {
+      desc = room.descriptions.with_light;
+    } else {
+      desc = room.descriptions.default || "";
+      if (!forceFull && rs.visited && room.descriptions.short) {
+        desc = room.descriptions.short;
+      }
+      for (const key of Object.keys(room.descriptions)) {
+        if (["default", "short", "dark", "with_light"].includes(key)) continue;
+        if (STATE.flags[key]) desc = room.descriptions[key];
+      }
+    }
+    printRoomDesc(desc);
+
+    const visible = rs.items.map(id => W.items[id]).filter(it => it && !it.scenery);
+    if (visible.length) {
+      const names = visible.map(it => aOrThe(it.name));
+      printInstant("You can see " + joinList(names) + " here.", "item");
+    }
+
+    for (const nid of rs.npcs) {
+      const n = W.npcs[nid]; if (!n) continue;
+      printInstant(capitalize(n.name) + " is here.", "npc");
+    }
+
+    // Only list exits that actually go somewhere (have `to`) or trigger an
+    // in-world interaction (e.g. the lighthouse finale). Pure blocked exits
+    // exist only to give a flavor failMessage when attempted — don't advertise
+    // them as real options.
+    const exitDirs = Object.keys(room.exits || {}).filter(d => {
+      const ex = room.exits[d];
+      return ex && (ex.to || ex.interaction);
+    });
+    if (exitDirs.length) printInstant("Exits: " + exitDirs.join(", ") + ".", "system");
+  }
+
+  function joinList(arr) {
+    if (arr.length <= 1) return arr.join("");
+    if (arr.length === 2) return arr[0] + " and " + arr[1];
+    return arr.slice(0, -1).join(", ") + ", and " + arr[arr.length - 1];
+  }
+  function aOrThe(name) {
+    if (/^a |^an |^the |^some /i.test(name)) return name;
+    return (/^[aeiou]/i.test(name) ? "an " : "a ") + name;
+  }
+  function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
+  /* ------------------------------------------------------------------ */
+  /*  Scoring                                                            */
+  /* ------------------------------------------------------------------ */
+
+  function awardScore(eventId) {
+    if (!eventId) return;
+    if (STATE.scoredEvents[eventId]) return;
+    const pts = (W.scoreEvents || {})[eventId];
+    if (!pts) return;
+    STATE.scoredEvents[eventId] = true;
+    STATE.score += pts;
+    printInstant("[Your score just went up by " + pts + " points.]", "system");
+    updateHUD();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Event & flag plumbing                                              */
+  /* ------------------------------------------------------------------ */
+
+  function setFlag(name) {
+    if (!name) return;
+    STATE.flags[name] = true;
+    checkSpawns();
+    checkEndings();
+  }
+
+  function applyEventBlock(ev) {
+    if (!ev) return;
+    if (typeof ev === "string") { print(ev, "room-desc"); return; }
+    if (ev.message) print(ev.message, "room-desc");
+    if (ev.setFlag) setFlag(ev.setFlag);
+    if (Array.isArray(ev.setFlags)) for (const f of ev.setFlags) setFlag(f);
+    if (ev.clearFlag) STATE.flags[ev.clearFlag] = false;
+    if (ev.grantsItem) {
+      STATE.inventory.push(ev.grantsItem);
+      printInstant("(You now have " + aOrThe(W.items[ev.grantsItem].name) + ".)", "system");
+    }
+    if (ev.scoreEvent) awardScore(ev.scoreEvent);
+    if (ev.movesTo) {
+      STATE.previousRoom = STATE.currentRoom;
+      STATE.currentRoom = ev.movesTo;
+      currentRoomState().visited = true;
+      renderRoom(true);
+    }
+    if (ev.showsMap) handleMap();
+    if (ev.finale) runFinale(ev.finale);
+  }
+
+  function checkSpawns() {
+    const spawns = W.spawns || {};
+    for (const flag in spawns) {
+      if (!STATE.flags[flag]) continue;
+      const list = Array.isArray(spawns[flag]) ? spawns[flag] : [spawns[flag]];
+      for (const spec of list) {
+        const key = flag + "::" + spec.room + "::" + spec.item;
+        if (STATE.spawned[key]) continue;
+        STATE.spawned[key] = true;
+        const rs = STATE.roomStates[spec.room];
+        if (!rs) continue;
+        if (!rs.items.includes(spec.item)) rs.items.push(spec.item);
+        if (spec.announce) printInstant(spec.announce, "system");
+      }
+    }
+  }
+
+  function checkEndings() {
+    const endings = W.endings || {};
+    for (const key in endings) {
+      const e = endings[key];
+      if (STATE.flags["_ended_" + key]) continue;
+      let fire = false;
+      if (e.flag && STATE.flags[e.flag]) fire = true;
+      if (Array.isArray(e.allFlags) && e.allFlags.every(f => STATE.flags[f])) fire = true;
+      if (!fire) continue;
+      STATE.flags["_ended_" + key] = true;
+      if (e.finale) runFinale(e.finale);
+      else if (e.message) print(e.message, "room-desc");
+      if (e.scoreEvent) awardScore(e.scoreEvent);
+      STATE.flags.game_won = (key === "win" || e.win === true);
+      STATE.flags.game_over = true;
+    }
+  }
+
+  function runFinale(key) {
+    const f = (C.finale && C.finale[key]) || null;
+    if (!f) return;
+    for (const line of f) print(line, "room-desc");
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Handlers                                                           */
+  /* ------------------------------------------------------------------ */
+
+  function exitPasses(ex) {
+    if (!ex.requires) return { ok: true };
+    const req = ex.requires;
+    if (req.item && !STATE.inventory.includes(req.item)) return { ok: false };
+    if (req.flag && !STATE.flags[req.flag]) return { ok: false };
+    if (Array.isArray(req.items)) {
+      for (const it of req.items) {
+        if (!STATE.inventory.includes(it)) return { ok: false };
+      }
+    }
+    if (Array.isArray(req.flags)) {
+      for (const f of req.flags) if (!STATE.flags[f]) return { ok: false };
+    }
+    return { ok: true };
+  }
+
+  function handleGo(dir) {
+    if (!dir) { print("Which direction?", "error"); return false; }
+    const room = currentRoom();
+    const ex = (room.exits || {})[dir];
+    if (!ex) { print("You can't go that way.", "error"); return false; }
+
+    // Interaction-gated exit (e.g., lighthouse interior)
+    if (ex.interaction) {
+      const interactions = room.interactions || {};
+      const inter = interactions[ex.interaction];
+      if (!inter) { print("That way leads nowhere.", "error"); return false; }
+      const pass = exitPasses({ requires: inter.requires });
+      if (!pass.ok) {
+        print(inter.failMessage || "You can't do that yet.", "error");
+        return false;
+      }
+      if (inter.message) print(inter.message, "room-desc");
+      if (inter.finale) runFinale(inter.finale);
+      if (inter.setsFlag) setFlag(inter.setsFlag);
+      if (Array.isArray(inter.setsFlags)) for (const f of inter.setsFlags) setFlag(f);
+      if (inter.scoreEvent) awardScore(inter.scoreEvent);
+      return true;
+    }
+
+    if (ex.blocked) { print(ex.failMessage || "You can't go that way.", "error"); return false; }
+
+    const pass = exitPasses(ex);
+    if (!pass.ok) {
+      print(ex.failMessage || "Something blocks your way.", "error");
+      return false;
+    }
+    if (ex.consumesItem && ex.requires && ex.requires.item) {
+      removeFromInventory(ex.requires.item);
+    }
+    if (!ex.to) { print(ex.failMessage || "That way leads nowhere.", "error"); return false; }
+
+    if (ex.message) printInstant(ex.message, "system");
+
+    STATE.previousRoom = STATE.currentRoom;
+    STATE.currentRoom = ex.to;
+    const rs = currentRoomState();
+    const firstVisit = !rs.visited;
+    rs.visited = true;
+
+    const dest = currentRoom();
+    if (firstVisit && dest.onEnterFirst) applyOnEnter(dest.onEnterFirst);
+    if (dest.onEnter) applyOnEnter(dest.onEnter);
+
+    renderRoom(firstVisit);
+    checkEndings();
+    return true;
+  }
+
+  function applyOnEnter(ev) {
+    if (typeof ev === "string") {
+      print(ev, "room-desc");
+      return;
+    }
+    applyEventBlock(ev);
+  }
+
+  function handleLook(obj) {
+    if (!obj) { renderRoom(true); return false; }
+    const res = resolveNoun(obj);
+    if (res.notFound) { print(pool("unknownNoun", { noun: obj }), "error"); return false; }
+    if (res.notHere) { print(pool("notAccessible", { noun: obj }), "error"); return false; }
+    if (res.ambiguous) { printAmbiguous(res.ambiguous); return false; }
+    const e = entityById(res.id);
+    print(e.examine || e.description || "You see nothing special.", "room-desc");
+    return false;
+  }
+
+  function handleTake(obj) {
+    if (!obj) { print(pool("missingObject", { verb: "take" }), "error"); return false; }
+    if (obj === "all" || obj === "everything") {
+      const rs = currentRoomState();
+      const ids = rs.items.filter(id => {
+        const it = W.items[id];
+        return it && it.takeable !== false && it.portable !== false && !it.scenery;
+      });
+      if (!ids.length) { print("There's nothing here to take.", "error"); return false; }
+      for (const id of ids) takeById(id);
+      return true;
+    }
+    const res = resolveNoun(obj);
+    if (res.notFound) { print(pool("unknownNoun", { noun: obj }), "error"); return false; }
+    if (res.ambiguous) { printAmbiguous(res.ambiguous); return false; }
+    if (STATE.inventory.includes(res.id)) {
+      print(pool("alreadyHave", { noun: shortName(res.id) }), "error"); return false;
+    }
+    return takeById(res.id);
+  }
+
+  function takeById(id) {
+    const it = W.items[id];
+    if (!it) { print("You can't take that.", "error"); return false; }
+    if (it.scenery) { print(pool("cantTake", { noun: shortName(id) }), "error"); return false; }
+    if (it.takeable === false || it.portable === false) {
+      print(pool("cantTake", { noun: shortName(id) }), "error"); return false;
+    }
+    if (it.tooHeavy) { print(pool("tooHeavy", { noun: shortName(id) }), "error"); return false; }
+
+    const rs = currentRoomState();
+    const idx = rs.items.indexOf(id);
+    if (idx >= 0) rs.items.splice(idx, 1);
+    STATE.inventory.push(id);
+    printInstant(pool("taken", { noun: shortName(id) }), "system");
+
+    if (it.scoreOnTake) awardScore(it.scoreOnTake);
+    const conv = "took_" + id;
+    if ((W.scoreEvents || {})[conv]) awardScore(conv);
+    return true;
+  }
+
+  function handleDrop(obj) {
+    if (!obj) { print(pool("missingObject", { verb: "drop" }), "error"); return false; }
+    const res = resolveNoun(obj, { inventoryOnly: true });
+    if (res.notFound) { print(pool("dontHave", { noun: obj }), "error"); return false; }
+    if (res.ambiguous) { printAmbiguous(res.ambiguous); return false; }
+    removeFromInventory(res.id);
+    currentRoomState().items.push(res.id);
+    printInstant(pool("dropped", { noun: shortName(res.id) }), "system");
+    return true;
+  }
+
+  function handleInventory() {
+    if (!STATE.inventory.length) {
+      printInstant("You are carrying nothing.", "system");
+      return false;
+    }
+    printInstant("You are carrying:", "system");
+    for (const id of STATE.inventory) {
+      const it = W.items[id]; if (!it) continue;
+      enqueuePrintInstant("  " + escHTML(it.name), "item");
+    }
+    return false;
+  }
+
+  function handleUse(direct, indirect) {
+    if (!direct) { print(pool("missingObject", { verb: "use" }), "error"); return false; }
+    const a = resolveNoun(direct, { inventoryOnly: true });
+    if (a.notFound) { print(pool("dontHave", { noun: direct }), "error"); return false; }
+    if (a.ambiguous) { printAmbiguous(a.ambiguous); return false; }
+    const itemA = W.items[a.id];
+
+    if (!indirect) {
+      if (itemA.useAlone) {
+        const rule = itemA.useAlone;
+        print(rule.message, "room-desc");
+        if (rule.setsFlag) setFlag(rule.setsFlag);
+        if (rule.showsMap) handleMap();
+        if (rule.scoreEvent) awardScore(rule.scoreEvent);
+        if (rule.consumesItem) removeFromInventory(a.id);
+        return true;
+      }
+      print("You'd have to use it on something. Try USE " + direct.toUpperCase() + " ON ...", "error");
+      return false;
+    }
+
+    const b = resolveNoun(indirect);
+    if (b.notFound) { print(pool("unknownNoun", { noun: indirect }), "error"); return false; }
+    if (b.notHere) { print(pool("notAccessible", { noun: indirect }), "error"); return false; }
+    if (b.ambiguous) { printAmbiguous(b.ambiguous); return false; }
+
+    return applyUseInteraction(a.id, b.id);
+  }
+
+  function applyUseInteraction(aId, bId) {
+    const itemA = W.items[aId];
+    const itemB = W.items[bId] || W.npcs[bId];
+    const rule = (itemA.useWith || {})[bId] ||
+                 (itemB && itemB.useWith && itemB.useWith[aId]);
+    // Also check NPC interactions for "give X"
+    if (!rule && W.npcs[bId]) {
+      const npc = W.npcs[bId];
+      const give = (npc.interactions || {})["give " + aId];
+      if (give) return applyNpcRule(npc, give, aId);
+    }
+    if (!rule) {
+      print(pool("cantDoThat"), "error");
+      return false;
+    }
+    if (rule.success === false) {
+      if (rule.message) print(rule.message, "error");
+      return false;
+    }
+    if (rule.message) print(rule.message, "room-desc");
+    if (rule.consumesItem) removeFromInventory(aId);
+    if (rule.grantsItem) {
+      STATE.inventory.push(rule.grantsItem);
+      printInstant("(You now have " + aOrThe(W.items[rule.grantsItem].name) + ".)", "system");
+    }
+    if (rule.setsFlag) setFlag(rule.setsFlag);
+    if (Array.isArray(rule.setsFlags)) for (const f of rule.setsFlags) setFlag(f);
+    if (rule.scoreEvent) awardScore(rule.scoreEvent);
+    if (rule.movesTo) {
+      STATE.previousRoom = STATE.currentRoom;
+      STATE.currentRoom = rule.movesTo;
+      currentRoomState().visited = true;
+      renderRoom(true);
+    }
+    if (rule.finale) runFinale(rule.finale);
+    return true;
+  }
+
+  function applyNpcRule(npc, rule, aId) {
+    if (rule.success === false) {
+      if (rule.message) print(rule.message, "error");
+      return false;
+    }
+    if (rule.message) print(rule.message, "npc");
+    if (rule.consumesItem) removeFromInventory(aId);
+    if (rule.grantsItem) {
+      STATE.inventory.push(rule.grantsItem);
+      printInstant("(You now have " + aOrThe(W.items[rule.grantsItem].name) + ".)", "system");
+    }
+    if (rule.setsFlag) setFlag(rule.setsFlag);
+    if (rule.scoreEvent) awardScore(rule.scoreEvent);
+    return true;
+  }
+
+  function handleGive(direct, indirect) {
+    if (!direct || !indirect) { print("Give what to whom?", "error"); return false; }
+    const a = resolveNoun(direct, { inventoryOnly: true });
+    if (a.notFound) { print(pool("dontHave", { noun: direct }), "error"); return false; }
+    if (a.ambiguous) { printAmbiguous(a.ambiguous); return false; }
+
+    const b = resolveNoun(indirect);
+    if (b.notFound) { print(pool("unknownNoun", { noun: indirect }), "error"); return false; }
+    if (b.notHere) { print(pool("notAccessible", { noun: indirect }), "error"); return false; }
+    if (b.ambiguous) { printAmbiguous(b.ambiguous); return false; }
+
+    return applyUseInteraction(a.id, b.id);
+  }
+
+  function handleTalk(direct, topic) {
+    if (!direct) { print("Talk to whom?", "error"); return false; }
+    const r = resolveNoun(direct);
+    if (r.notFound) { print(pool("unknownNoun", { noun: direct }), "error"); return false; }
+    if (r.notHere) { print(pool("notAccessible", { noun: direct }), "error"); return false; }
+    if (r.ambiguous) { printAmbiguous(r.ambiguous); return false; }
+
+    const npc = W.npcs[r.id];
+    if (!npc) { print("You can't talk to that.", "error"); return false; }
+
+    if (topic) {
+      const topicKey = normalizeTopicKey(topic);
+      const rule =
+        (npc.interactions || {})["ask about " + topicKey] ||
+        (npc.dialogue || {})["ask about " + topicKey];
+      if (rule) {
+        if (typeof rule === "string") {
+          print(rule, "npc");
+          return true;
+        }
+        if (rule.requiresFlag && !STATE.flags[rule.requiresFlag]) {
+          print(npc.dialogue.default || "They shrug.", "npc");
+          return false;
+        }
+        print(rule.message, "npc");
+        if (rule.setsFlag) setFlag(rule.setsFlag);
+        if (rule.scoreEvent) awardScore(rule.scoreEvent);
+        return true;
+      }
+      print("\"I don't know anything about that.\"", "npc");
+      return false;
+    }
+
+    // Plain TALK — pick dialogue variant + track talk count + onDialogue hooks
+    STATE.talkCount[npc.id] = (STATE.talkCount[npc.id] || 0) + 1;
+
+    let variant = "default";
+    if (npc.dialogueFlagKey && npc.dialogueFlagMap) {
+      const v = !!STATE.flags[npc.dialogueFlagKey];
+      const key = npc.dialogueFlagMap[String(v)];
+      if (key && npc.dialogue[key]) variant = key;
+    }
+    const line = npc.dialogue[variant] || npc.dialogue.default;
+    print(line || "They have nothing to say.", "npc");
+
+    if (npc.onDialogue && npc.onDialogue[variant]) {
+      applyEventBlock(npc.onDialogue[variant]);
+    }
+    return false;
+  }
+
+  function normalizeTopicKey(s) {
+    const toks = stripArticles(s.toLowerCase().split(/\s+/));
+    const id = findGlobalEntity(toks.join(" "));
+    if (id) return id;
+    return toks.join(" ");
+  }
+
+  function handleOpen(obj) {
+    if (!obj) { print(pool("missingObject", { verb: "open" }), "error"); return false; }
+    const r = resolveNoun(obj);
+    if (r.notFound) { print(pool("unknownNoun", { noun: obj }), "error"); return false; }
+    if (r.ambiguous) { printAmbiguous(r.ambiguous); return false; }
+    if (!tryRoomOverride("OPEN", r.id, null)) print(pool("cantDoThat"), "error");
+    return false;
+  }
+
+  function handleAttack(obj) {
+    if (!obj) { print("Attack what?", "error"); return false; }
+    const r = resolveNoun(obj);
+    if (r.notFound) { print(pool("unknownNoun", { noun: obj }), "error"); return false; }
+    if (r.notHere) { print(pool("notAccessible", { noun: obj }), "error"); return false; }
+    if (r.ambiguous) { printAmbiguous(r.ambiguous); return false; }
+
+    const npc = W.npcs[r.id];
+    if (npc && npc.interactions && npc.interactions.attack) {
+      print(npc.interactions.attack.message, "npc");
+      return false;
+    }
+    if (tryRoomOverride("ATTACK", r.id, null)) return true;
+    print("Violence won't help here.", "error");
+    return false;
+  }
+
+  function handlePet(obj) {
+    if (!obj) { print("Pet what?", "error"); return false; }
+    const r = resolveNoun(obj);
+    if (r.notFound) { print(pool("unknownNoun", { noun: obj }), "error"); return false; }
+    if (r.notHere) { print(pool("notAccessible", { noun: obj }), "error"); return false; }
+    if (r.ambiguous) { printAmbiguous(r.ambiguous); return false; }
+    const npc = W.npcs[r.id];
+    if (npc && npc.interactions && npc.interactions.pet) {
+      print(npc.interactions.pet.message, "npc");
+      return false;
+    }
+    print("That's not something you can pet.", "error");
+    return false;
+  }
+
+  function handleWait() {
+    print(pool("wait"), "room-desc");
+    return true;
+  }
+
+  function handleHint() {
+    const chain = (W.hints && W.hints.chain) || [];
+    for (const h of chain) {
+      if (typeof h.when === "function" && h.when(STATE)) {
+        const lvl = (STATE.hintLevel[h.id] || 0);
+        const stages = [h.nudge, h.push, h.shove];
+        const msg = stages[Math.min(lvl, stages.length - 1)];
+        STATE.hintLevel[h.id] = Math.min(lvl + 1, stages.length - 1);
+        print("(Hint) " + msg, "system");
+        return false;
+      }
+    }
+    const fallback = (W.hints && W.hints.fallback) || [];
+    if (fallback.length) {
+      const i = (STATE.hintLevel._fallback || 0) % fallback.length;
+      STATE.hintLevel._fallback = i + 1;
+      print("(Hint) " + fallback[i], "system");
+    } else {
+      print("(No hints available right now.)", "system");
+    }
+    return false;
+  }
+
+  function handleScore() {
+    printInstant("Score: " + STATE.score + "/" + STATE.maxScore +
+                 "   Moves: " + STATE.moves, "system");
+    return false;
+  }
+
+  function handleSave(slot) {
+    slot = (slot || DEFAULT_SLOT).toString().trim();
+    if (!SAVE_SLOTS.includes(slot)) {
+      print("Save slots are 1, 2, or 3. Use: SAVE 2", "error");
+      return false;
+    }
+    try {
+      const payload = { savedAt: Date.now(), state: STATE };
+      localStorage.setItem("embarcadero_save_" + slot, JSON.stringify(payload));
+      printInstant("Game saved to slot " + slot + ".", "system");
+    } catch (e) {
+      print("Save failed: " + e.message, "error");
+    }
+    return false;
+  }
+
+  function handleLoad(slot) {
+    slot = (slot || DEFAULT_SLOT).toString().trim();
+    if (!SAVE_SLOTS.includes(slot)) {
+      print("Save slots are 1, 2, or 3. Use: LOAD 2", "error");
+      return false;
+    }
+    try {
+      const raw = localStorage.getItem("embarcadero_save_" + slot);
+      if (!raw) { print("No save in slot " + slot + ".", "error"); return false; }
+      const payload = JSON.parse(raw);
+      STATE = payload.state || payload;  // back-compat
+      printInstant("Game loaded from slot " + slot + ".", "system");
+      renderRoom(true);
+      updateHUD();
+    } catch (e) {
+      print("Load failed: " + e.message, "error");
+    }
+    return false;
+  }
+
+  function handleSaves() {
+    printInstant("Save slots:", "system");
+    for (const s of SAVE_SLOTS) {
+      const raw = localStorage.getItem("embarcadero_save_" + s);
+      if (!raw) {
+        enqueuePrintInstant("  " + s + ". (empty)", "system");
+        continue;
+      }
+      try {
+        const p = JSON.parse(raw);
+        const ts = p.savedAt ? new Date(p.savedAt).toLocaleString() : "?";
+        const room = (p.state && W.rooms[p.state.currentRoom] &&
+                      W.rooms[p.state.currentRoom].name) || "?";
+        const score = (p.state && p.state.score) || 0;
+        enqueuePrintInstant("  " + s + ". " + ts + "  —  " + escHTML(room) +
+                            "  (score " + score + ")", "system");
+      } catch (e) {
+        enqueuePrintInstant("  " + s + ". (corrupt)", "error");
+      }
+    }
+    return false;
+  }
+
+  function handleUndo() {
+    if (!PREV_STATE) { print("Nothing to undo.", "error"); return false; }
+    STATE = JSON.parse(PREV_STATE);
+    PREV_STATE = null;
+    printInstant("(Undone.)", "system");
+    renderRoom(true);
+    updateHUD();
+    return false;
+  }
+
+  function handleRestart() {
+    STATE = freshState();
+    PREV_STATE = null;
+    FAILURE_CURSORS = {};
+    printInstant("--- Restarting ---", "system");
+    print(C.intro, "room-desc");
+    renderRoom(true);
+    updateHUD();
+    return false;
+  }
+
+  function handleMap() {
+    const visited = Object.keys(STATE.roomStates).filter(id => STATE.roomStates[id].visited);
+    if (!visited.length) { printInstant("You haven't been anywhere yet.", "system"); return false; }
+    printInstant("Rooms visited:", "system");
+    for (const id of visited) {
+      const r = W.rooms[id];
+      const mark = id === STATE.currentRoom ? " *" : "";
+      enqueuePrintInstant("  " + escHTML(r.name) + mark, "system");
+    }
+    return false;
+  }
+
+  function tryRoomOverride(verb, directId, indirectId) {
+    const room = currentRoom();
+    const vo = room.verbOverrides || {};
+    const key = verb + (directId ? ":" + directId : "") + (indirectId ? ":" + indirectId : "");
+    const rule = vo[key] || vo[verb];
+    if (!rule) return false;
+    if (typeof rule === "function") { rule(STATE); return true; }
+    if (rule.message) print(rule.message, "room-desc");
+    applyEventBlock(rule);
+    return true;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Special one-word commands (easter eggs)                            */
+  /* ------------------------------------------------------------------ */
+
+  function handleSpecial(verb) {
+    const specials = C.specials || {};
+    const key = verb.replace(/^_/, "").toLowerCase();
+    const v = specials[key];
+    if (!v) return false;
+    if (Array.isArray(v)) {
+      const idx = (FAILURE_CURSORS["_special_" + key] || 0) % v.length;
+      FAILURE_CURSORS["_special_" + key] = idx + 1;
+      print(v[idx], "system");
+    } else {
+      print(v, "system");
+    }
+    return false;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Misc helpers                                                       */
+  /* ------------------------------------------------------------------ */
+
+  function removeFromInventory(id) {
+    const i = STATE.inventory.indexOf(id);
+    if (i >= 0) STATE.inventory.splice(i, 1);
+  }
+  function shortName(id) {
+    const e = entityById(id);
+    if (!e) return id;
+    return (e.aliases && e.aliases[0]) || e.name;
+  }
+  function printAmbiguous(ids) {
+    const names = ids.map(shortName);
+    print(pool("ambiguous", { a: names[0], b: names[1] }), "error");
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Dispatch                                                           */
+  /* ------------------------------------------------------------------ */
+
+  function dispatch(parsed) {
+    switch (parsed.verb) {
+      case "_PROFANITY": print(pool("profanity"), "system"); return false;
+      case "_UNKNOWN":
+        print(pool("unknownVerb", { word: parsed.word }), "error"); return false;
+
+      case "GO":         return handleGo(parsed.direction);
+      case "LOOK":       return handleLook(parsed.direct);
+      case "TAKE":       return handleTake(parsed.direct);
+      case "DROP":       return handleDrop(parsed.direct);
+      case "INVENTORY":  return handleInventory();
+      case "USE":        return handleUse(parsed.direct, parsed.indirect);
+      case "GIVE":       return handleGive(parsed.direct, parsed.indirect);
+      case "TALK":       return handleTalk(parsed.direct, parsed.indirect);
+      case "OPEN":       return handleOpen(parsed.direct);
+      case "ATTACK":     return handleAttack(parsed.direct);
+      case "PET":        return handlePet(parsed.direct);
+      case "WAIT":       return handleWait();
+      case "HELP":       print(C.help, "system"); return false;
+      case "HINT":       return handleHint();
+      case "SCORE":      return handleScore();
+      case "SAVE":       return handleSave(parsed.direct);
+      case "LOAD":       return handleLoad(parsed.direct);
+      case "SAVES":      return handleSaves();
+      case "UNDO":       return handleUndo();
+      case "RESTART":    return handleRestart();
+      case "MAP":        return handleMap();
+      case "QUIT":
+        print("Use RESTART to start over, or SAVE to preserve your progress.", "system");
+        return false;
+      case "AGAIN":
+        if (!LAST_COMMAND) { print("There's nothing to repeat.", "error"); return false; }
+        return runCommand(LAST_COMMAND, { isRepeat: true });
+
+      default:
+        if (parsed.verb && parsed.verb.startsWith("_")) {
+          if (handleSpecial(parsed.verb)) return false;
+        }
+        print(pool("cantDoThat"), "error");
+        return false;
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Command loop                                                       */
+  /* ------------------------------------------------------------------ */
+
+  function runCommand(raw, opts) {
+    opts = opts || {};
+    if (!opts.isRepeat) printEcho(raw);
+
+    if (STATE.flags.game_over) {
+      print("The game is over. Type RESTART to play again, or LOAD 1/2/3.", "system");
+      return;
+    }
+
+    const parsed = parse(raw);
+    if (parsed.empty) { print(pool("emptyInput"), "system"); return; }
+
+    PREV_STATE = JSON.stringify(STATE);
+
+    const movedOrActed = dispatch(parsed);
+
+    if (movedOrActed) {
+      STATE.moves += 1;
+      updateHUD();
+    }
+
+    if (parsed.verb && parsed.verb !== "AGAIN" &&
+        !["UNDO", "SAVE", "LOAD", "SAVES", "HELP", "HINT", "SCORE", "MAP", "INVENTORY"]
+          .includes(parsed.verb)) {
+      LAST_COMMAND = raw;
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Boot                                                               */
+  /* ------------------------------------------------------------------ */
+
+  function boot() {
+    STATE = freshState();
+    updateHUD();
+    print(C.intro, "room-desc");
+    renderRoom(true);
+
+    formEl.addEventListener("submit", function (e) {
+      e.preventDefault();
+      const v = inputEl.value;
+      inputEl.value = "";
+      if (v.trim() !== "") runCommand(v);
+    });
+
+    document.getElementById("crt").addEventListener("click", function () {
+      if (TYPING) SKIP_ALL = true;
+      inputEl.focus();
+    });
+
+    document.addEventListener("keydown", function () {
+      if (TYPING) SKIP_ALL = true;
+    });
+
+    window._EMB = { STATE: () => STATE, parse, dispatch, runCommand };
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+})();
+
+window.__loaded_engine = true;
+}catch(e){window.__err_engine = (e&&e.stack)||String(e);}</script>
+
+  <!-- Diagnostic: if external scripts didn't load, report it visibly. -->
+  <script>
+    (function () {
+      setTimeout(function () {
+        var out = document.getElementById("output");
+        if (!out) return;
+        var missing = [];
+        if (typeof window.CONTENT === "undefined") missing.push("content.js (window.CONTENT)");
+        if (typeof window.WORLD === "undefined")   missing.push("world.js (window.WORLD)");
+        if (typeof window._EMB === "undefined")    missing.push("engine.js (boot did not run)");
+        if (missing.length === 0) return;
+        if (out.textContent.trim().length > 0) return; // engine rendered something
+        var d = document.createElement("div");
+        d.style.cssText =
+          "color:#ffd680;background:#1a1508;padding:10px 14px;margin:8px 0;" +
+          "border-left:3px solid #ffd680;font-family:monospace;white-space:pre-wrap;";
+        var errs = [];
+        if (window.__err_content) errs.push("content.js error:\n" + window.__err_content);
+        if (window.__err_world)   errs.push("world.js error:\n" + window.__err_world);
+        if (window.__err_engine)  errs.push("engine.js error:\n" + window.__err_engine);
+        var loaded = {
+          content: !!window.__loaded_content,
+          world:   !!window.__loaded_world,
+          engine:  !!window.__loaded_engine
+        };
+        d.textContent =
+          "DIAGNOSTIC:\n" +
+          "script blocks reached end: " + JSON.stringify(loaded) + "\n" +
+          "missing globals: " + missing.join(", ") + "\n\n" +
+          (errs.length ? errs.join("\n\n") :
+            "(no errors were thrown — scripts may not have been executed at all)");
+        out.appendChild(d);
+      }, 200);
+    })();
+  </script>
+</body>
+</html>
