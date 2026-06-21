@@ -1449,29 +1449,63 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
 
     // new verbs
     "push": "PUSH", "shove": "PUSH", "slide": "PUSH",
-    "buy": "BUY", "purchase": "BUY", "pay": "BUY",
+    "buy": "BUY", "purchase": "BUY", "pay": "BUY", "order": "BUY",
     "smell": "SMELL", "sniff": "SMELL",
     "listen": "LISTEN", "hear": "LISTEN",
     "call": "CALL", "phone": "CALL", "dial": "CALL",
     "kiss": "KISS", "hug": "KISS",
     "undress": "UNDRESS", "strip": "UNDRESS",
-    "examine self": "_SELF", "look self": "_SELF"
+    "examine self": "_SELF", "look self": "_SELF",
+    // additional natural synonyms
+    "wear": "USE", "put": "USE", "attach": "USE", "combine": "USE",
+    "connect": "USE", "tie": "USE", "thread": "USE", "fasten": "USE",
+    "unlock": "OPEN", "knock": "OPEN",
+    "remove": "DROP", "unwear": "DROP", "doff": "DROP",
+    "climb": "GO", "approach": "GO", "enter": "GO",
+    "touch": "LOOK", "feel": "LOOK",
+    "tip": "GIVE", "offer": "GIVE",
+    "selfexamine": "_SELF"
   };
 
   // Multi-word verb phrases collapsed before tokenization.
   const MULTIWORD_VERBS = [
     ["pick up", "pickup"],
     ["put down", "putdown"],
+    ["put away", "putdown"],
     ["set down", "setdown"],
     ["turn on", "turnon"],
     ["look at", "look"],
     ["look in", "look"],
     ["look under", "look"],
+    ["look around", "look"],
+    ["look at me", "selfexamine"],
+    ["look at myself", "selfexamine"],
+    ["examine me", "selfexamine"],
+    ["examine myself", "selfexamine"],
     ["what do i have", "inventory"],
     ["check pockets", "inventory"],
+    ["what am i carrying", "inventory"],
     ["what do i do", "help"],
+    ["how do i", "help"],
     ["go inside", "enter inside"],
-    ["go in", "enter inside"]
+    ["go in", "enter inside"],
+    ["go out", "leave"],
+    ["step out", "leave"],
+    ["step into", "enter inside"],
+    ["climb up", "go up"],
+    ["climb down", "go down"],
+    // "talk to/with NPC" — strip "to"/"with" so "about" can split correctly
+    ["talk to", "talk"],
+    ["talk with", "talk"],
+    ["speak to", "speak"],
+    ["speak with", "speak"],
+    ["chat with", "chat"],
+    // "where am i" etc → bare look
+    ["where am i", "look"],
+    ["where are we", "look"],
+    ["what do i see", "look"],
+    ["what is here", "look"],
+    ["what's here", "look"]
   ];
 
   const PREPOSITIONS = [
@@ -1733,7 +1767,10 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
 
   function fuzzyBest(word, candidates) {
     if (!word || word.length < 4) return null;
-    let best = null, bestD = 3; // distance <= 2
+    // Tighter threshold for short words: distance-1 for ≤5 chars, distance-2 for longer.
+    // This prevents e.g. "glass" (distance-2 from "brass") wrongly matching brass_key.
+    const maxDist = word.length <= 5 ? 1 : 2;
+    let best = null, bestD = maxDist + 1;
     for (const c of candidates) {
       if (!c || c.length < 3) continue;
       const d = levenshtein(word, c);
@@ -2419,6 +2456,13 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
   function handleTalk(direct, topic) {
     if (!direct) { print("Talk to whom?", "error"); return false; }
     const r = resolveNoun(direct);
+
+    // "ask about leo" with no explicit NPC → if one NPC is here, ask them
+    if ((r.notFound || (r.id && !W.npcs[r.id])) && !topic) {
+      const roomNpcs = currentRoomState().npcs;
+      if (roomNpcs.length === 1) return handleTalk(roomNpcs[0], direct);
+    }
+
     if (r.notFound) { print(pool("unknownNoun", { noun: direct }), "error"); return false; }
     if (r.notHere) { print(pool("notAccessible", { noun: direct }), "error"); return false; }
     if (r.ambiguous) { printAmbiguous(r.ambiguous); return false; }
@@ -2486,7 +2530,9 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
     return toks.join(" ");
   }
 
-  function handleOpen(obj) {
+  function handleOpen(obj, instrument) {
+    // "open/unlock door with key" → remap to USE key ON door
+    if (instrument) return handleUse(instrument, obj);
     if (!obj) { print(pool("missingObject", { verb: "open" }), "error"); return false; }
     const r = resolveNoun(obj);
     if (r.notFound) { print(pool("unknownNoun", { noun: obj }), "error"); return false; }
@@ -2697,7 +2743,7 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
   function shortName(id) {
     const e = entityById(id);
     if (!e) return id;
-    return (e.aliases && e.aliases[0]) || e.name;
+    return e.name;
   }
   function printAmbiguous(ids) {
     const names = ids.map(shortName);
@@ -2857,8 +2903,26 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
       case "INVENTORY":  return handleInventory();
       case "USE":        return handleUse(parsed.direct, parsed.indirect);
       case "GIVE":       return handleGive(parsed.direct, parsed.indirect);
-      case "TALK":       return handleTalk(parsed.direct, parsed.indirect);
-      case "OPEN":       return handleOpen(parsed.direct);
+      case "TALK": {
+        let tTarget = parsed.direct, tTopic = parsed.indirect;
+        // "talk to jude about leo" still has "to" eaten first → direct="jude about leo"
+        // Split on " about " if direct contains it and no indirect yet.
+        if (tTarget && !tTopic) {
+          const ai = tTarget.indexOf(" about ");
+          if (ai >= 0) { tTopic = tTarget.slice(ai + 7).trim(); tTarget = tTarget.slice(0, ai).trim(); }
+        }
+        // "say hi to jude" → prep="to", direct="hi", indirect="jude"
+        // Detect: direct is not an NPC but indirect is → swap so NPC is target.
+        if (tTarget && tTopic && parsed.prep === "to") {
+          const tRes = resolveNoun(tTarget);
+          const iRes = resolveNoun(tTopic);
+          if ((!tRes.id || !W.npcs[tRes.id]) && iRes.id && W.npcs[iRes.id]) {
+            [tTarget, tTopic] = [tTopic, tTarget];
+          }
+        }
+        return handleTalk(tTarget || null, tTopic);
+      }
+      case "OPEN":       return handleOpen(parsed.direct, parsed.indirect);
       case "ATTACK":     return handleAttack(parsed.direct);
       case "PET":        return handlePet(parsed.direct);
       case "PUSH":       return handlePush(parsed.direct);
