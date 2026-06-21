@@ -1592,18 +1592,34 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
       typewriteLine(job.html, job.cls, drainQueue);
     }
   }
+  // Scroll #output just enough to reveal the bottom of `div`.
+  // Never scrolls backward — only advances if the div is below the fold.
+  function scrollToReveal(div) {
+    const bottom = div.offsetTop + div.offsetHeight;
+    const needed = bottom - outEl.clientHeight;
+    if (needed > outEl.scrollTop) outEl.scrollTop = needed;
+  }
+
   function renderInstant(html, cls) {
     const div = document.createElement("div");
     div.className = "line" + (cls ? " " + cls : "");
     div.innerHTML = html;
     outEl.appendChild(div);
-    outEl.scrollTop = outEl.scrollHeight;
+    if (cls === "echo") {
+      // Anchor view so the player's command is at the top and the
+      // response builds downward into the readable area.
+      outEl.scrollTop = Math.max(0, div.offsetTop - 8);
+    } else {
+      scrollToReveal(div);
+    }
   }
   function typewriteLine(html, cls, done) {
     const div = document.createElement("div");
     div.className = "line typing" + (cls ? " " + cls : "");
     div.innerHTML = html;
     outEl.appendChild(div);
+    // Reveal the start of this line before typing begins.
+    scrollToReveal(div);
 
     const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT);
     const nodes = [];
@@ -1618,7 +1634,7 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
     function finishAll() {
       for (const nd of nodes) nd.node.textContent = nd.full;
       div.classList.remove("typing");
-      outEl.scrollTop = outEl.scrollHeight;
+      scrollToReveal(div);
       done();
     }
     function step() {
@@ -1627,7 +1643,7 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
       const cur = nodes[i];
       if (j >= cur.full.length) { i++; j = 0; step(); return; }
       cur.node.textContent += cur.full[j++];
-      outEl.scrollTop = outEl.scrollHeight;
+      scrollToReveal(div);
       setTimeout(step, TYPE_DELAY);
     }
     step();
