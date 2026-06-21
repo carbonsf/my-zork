@@ -11,24 +11,27 @@ window.CONTENT = {
   /* ------------------------------------------------------------------ */
   intro: [
     "═══════════════════════════════════════════",
-    "   THE SECRET OF THE EMBARCADERO",
-    "   ~ An Adventure Along the San Francisco Waterfront ~",
+    "   SOUTH OF MARKET",
+    "   ~ A Text Adventure ~",
     "═══════════════════════════════════════════",
     "",
-    "San Francisco. Early morning.",
-    "Fog still drapes the bay.",
+    "San Francisco. Friday night. Late.",
+    "The fog is settling in over SOMA, thick and diesel-scented.",
     "",
-    "You stand at the north end of the Embarcadero,",
-    "though you can't quite remember why.",
-    "Your pockets are empty.",
-    "But intuition whispers that something important",
-    "waits for you along this stretch of waterfront —",
+    "You haven't been to this neighborhood in years.",
+    "Not since Marcus — leather artisan, mentor, the man who taught",
+    "you to see these streets as something more than concrete and",
+    "freeway overpasses — stopped returning your calls.",
     "",
-    "the memories of sailors who worked this harbor,",
-    "the ghosts of the rails that once ran beneath the piers,",
-    "and a trail of clues someone has left behind for you.",
+    "Three months of silence.",
+    "Then, yesterday, a package arrived:",
+    "a brass key with no note, wrapped in a torn page",
+    "from an old issue of Drummer magazine.",
     "",
-    "Everything begins at Pier 39.",
+    "On the back, in Marcus's handwriting:",
+    "  \"Ringold. Before they pour the foundation.\"",
+    "",
+    "Tonight you've come to find out what that means.",
     "",
     "(Type HELP for a command summary, or HINT if you get stuck.)",
     ""
@@ -40,11 +43,14 @@ window.CONTENT = {
   help: [
     "COMMANDS",
     "  Movement : N, S, E, W, NE, NW, SE, SW, UP, DOWN",
-    "             or GO <direction> — also ENTER, LEAVE, INSIDE",
+    "             or GO <direction> — also ENTER, LEAVE",
     "  Looking  : LOOK (L), EXAMINE <thing> (X <thing>)",
+    "             SMELL, LISTEN",
     "  Items    : TAKE <thing>, DROP <thing>, INVENTORY (I)",
     "  Using    : USE <thing> ON <thing>",
-    "             GIVE <thing> TO <npc>",
+    "             GIVE <thing> TO <npc>, SHOW <thing> TO <npc>",
+    "             PUSH <thing>",
+    "  Buying   : BUY <thing>",
     "  People   : TALK TO <npc>, ASK <npc> ABOUT <topic>",
     "  Meta     : SAVE [1-3], LOAD [1-3], SAVES, SCORE, MAP, WAIT (Z)",
     "             G (repeat last), UNDO, RESTART",
@@ -91,9 +97,9 @@ window.CONTENT = {
       "(Silence.)"
     ],
     profanity: [
-      "Such language! And in a nice place like this.",
-      "A nearby seagull looks pointedly unimpressed.",
-      "A passing tourist pretends not to hear."
+      "The bartender doesn't even look up. You're in SOMA.",
+      "Someone nearby laughs, but not at you.",
+      "The bass from the bar swallows the word whole."
     ],
     alreadyHave: [
       "You already have the {noun}.",
@@ -114,7 +120,7 @@ window.CONTENT = {
     dropped: [
       "Dropped.",
       "You set down the {noun}.",
-      "The {noun} clatters to the ground."
+      "The {noun} hits the ground."
     ],
     taken: [
       "Taken.",
@@ -123,14 +129,14 @@ window.CONTENT = {
     ],
     dark: [
       "It is pitch black. You can't see a thing.",
-      "The darkness is absolute. Better not stumble."
+      "The darkness is absolute."
     ],
     wait: [
-      "Time passes. The waves fold in and out.",
-      "Sea wind brushes your face.",
-      "A gull cuts overhead.",
-      "A foghorn moans somewhere distant.",
-      "Sunlight breaks through a seam in the clouds."
+      "The bass from somewhere thumps through the wall.",
+      "A truck rattles past on Folsom. The fog holds everything in.",
+      "Someone laughs from inside one of the bars. The sound cuts off.",
+      "The streetlights have halos tonight. The fog will only get thicker.",
+      "Diesel and leather conditioner and old concrete. You breathe it in."
     ]
   },
 
@@ -138,61 +144,63 @@ window.CONTENT = {
   /*  Easter eggs & one-word specials                                    */
   /* ------------------------------------------------------------------ */
   specials: {
-    xyzzy: "Nothing happens. This isn't Colossal Cave.",
-    plugh: "A hollow voice says, \"Fool.\"   ...no — that was just a gull.",
-    plover: "No exotic birds here. Just gulls.",
-    diagnose: "You are in good health. A bit windburned, perhaps.",
-    pray: "You offer a quiet prayer. The sound of the waves seems a little calmer.",
-    sing: "You start humming \"I Left My Heart in San Francisco.\" A passing tourist applauds.",
-    swim: "At this water temperature, hypothermia would set in within five minutes. Better not.",
-    jump: "Reckless things like that are best avoided.",
-    fly: "Regrettably, you lack the capacity.",
-    scream: "\"AAAAAAAH!\" The cry echoes off the Bay Bridge. A flock of pigeons lifts off all at once.",
-    dance: "You break into a dance on the Embarcadero. A street performer watches, visibly impressed.",
-    sleep: "A nap on a bench is tempting, but you have an adventure to finish.",
-    eat: "You have nothing to eat right now. (Unless you're holding sourdough, of course.)",
-    hello: "No one answers. A gull tilts its head at you.",
-    hi:    "No one answers. A gull tilts its head at you."
+    xyzzy:    "A hollow voice says, 'This is SOMA, not a cave in Massachusetts.'",
+    plugh:    "Nothing happens. But someone at the bar glances at you.",
+    plover:   "There are no exotic birds here.",
+    diagnose: "You are in good health, considering.",
+    pray:     "For Marcus. For the neighborhood. For whatever's left.",
+    sing:     "You start humming something under your breath. Nobody notices. That's okay.",
+    swim:     "The bay is six blocks north. And cold enough to kill you.",
+    jump:     "You resist the urge.",
+    fly:      "Regrettably, you lack the capacity.",
+    scream:   "You don't. Not yet.",
+    dance:    "There's no music here. Just you.",
+    sleep:    "You don't have time to sleep. Marcus has been underground for weeks.",
+    eat:      "You haven't eaten since this afternoon. You'll live.",
+    hello:    "No one answers.",
+    hi:       "No one answers.",
+    self:     "You look like someone who came here for a reason. Boots, jeans, t-shirt. You'll do.",
+    undress:  "Not yet.",
+    kiss:     "There's no one here to kiss.",
+    smell:    "Diesel and leather conditioner. Fog coming in. The neighborhood smells like itself.",
+    listen:   "Traffic on Folsom. The distant thump of music. The city at midnight."
   },
 
   /* ------------------------------------------------------------------ */
-  /*  Finale sequences (keyed by id; used by endings.finale / exit       */
-  /*  interactions)                                                      */
+  /*  Finale sequences                                                   */
   /* ------------------------------------------------------------------ */
   finale: {
-    lighthouse: [
+    soma_ending: [
       "",
-      "Inside the lighthouse, the air is still. A small round chamber",
-      "holds an ancient control panel with three shallow indentations.",
-      "Carved into the stone above: \"The record of the sea, the memory",
-      "of the land, and the one that points the way. When three are",
-      "gathered, the light returns.\"",
+      "The ladder rungs are cold under your hands.",
       "",
-      "You place the captain's log in the first indentation.  ...click.",
-      "You place the vintage train model in the second.   ...click, click.",
-      "You place the brass compass in the third.",
+      "You climb. The construction site falls away below you, the camp lantern's",
+      "dead light and Marcus's folding table growing small, the sound of his voice",
+      "fading: 'Get it to the Cultural District office. Tell them what you found.'",
       "",
-      "......",
+      "The satchel is heavy against your hip. Full of paper and photographs and",
+      "sixty years of lives that almost got buried under twenty stories of glass.",
       "",
-      "A low rumble. The lighthouse trembles. Above you, a great lens",
-      "begins to turn — and a dazzling pillar of light lances out across",
-      "the bay.",
+      "You push through a gap in the chain-link at the top of the site.",
       "",
-      "The beam parts the fog, glances off the crimson towers of the",
-      "Golden Gate Bridge, flashes along the silver cables of the Bay",
-      "Bridge, and touches even the cold walls of Alcatraz with a",
-      "sudden, unexpected warmth.",
+      "Harrison Street at dawn.",
       "",
-      "The entire bay glows gold.",
+      "The fog is burning off — not gone, just thinning, pulling back from the",
+      "streetlights in slow wisps. The city is waking up around you. A bus sighs",
+      "to a stop somewhere east. A crow lands on a construction sign and watches",
+      "you with professional interest.",
       "",
-      "You have unlocked the secret of the Embarcadero. The captains who",
-      "once walked this coast, the railworkers who laid the rails beneath",
-      "these piers, the long procession of lives that passed through here —",
-      "their memory lives on, inside this light.",
+      "Folsom is quiet. The bars are closed. The boots that walked this block last",
+      "night have all gone home. But the brass bootprints are still in the concrete",
+      "on Ringold, and the standing stones are still standing, and now the archive",
+      "in your arms will still exist when the foundation gets poured.",
       "",
-      "*** The adventure is over. ***",
+      "Marcus knew what he was doing when he sent you that key.",
       "",
-      "But the Embarcadero's story goes on — the next time you walk it, too."
+      "*** You have completed SOUTH OF MARKET. ***",
+      "",
+      "Type SCORE to see your final tally.",
+      ""
     ]
   }
 };

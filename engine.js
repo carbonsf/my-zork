@@ -82,7 +82,17 @@
     "scream": "_SCREAM", "sleep": "_SLEEP", "eat": "_EAT",
     "hello": "_HELLO", "hi": "_HELLO",
     "diagnose": "_DIAGNOSE",
-    "xyzzy": "_XYZZY", "plugh": "_PLUGH", "plover": "_PLOVER"
+    "xyzzy": "_XYZZY", "plugh": "_PLUGH", "plover": "_PLOVER",
+
+    // new verbs
+    "push": "PUSH", "shove": "PUSH", "slide": "PUSH",
+    "buy": "BUY", "purchase": "BUY", "pay": "BUY",
+    "smell": "SMELL", "sniff": "SMELL",
+    "listen": "LISTEN", "hear": "LISTEN",
+    "call": "CALL", "phone": "CALL", "dial": "CALL",
+    "kiss": "KISS", "hug": "KISS",
+    "undress": "UNDRESS", "strip": "UNDRESS",
+    "examine self": "_SELF", "look self": "_SELF"
   };
 
   // Multi-word verb phrases collapsed before tokenization.
@@ -132,7 +142,7 @@
   let FAILURE_CURSORS = {};
 
   /* Typewriter */
-  const TYPE_DELAY = 12;              // ms per character
+  const TYPE_DELAY = 4;               // ms per character
   const PRINT_QUEUE = [];
   let TYPING = false;
   let SKIP_ALL = false;
@@ -155,7 +165,8 @@
     return {
       currentRoom: W.meta.startRoom,
       previousRoom: null,
-      inventory: [],
+      inventory: Array.isArray(W.meta.startInventory) ? [...W.meta.startInventory] : [],
+      money: W.meta.startMoney !== undefined ? W.meta.startMoney : 20,
       score: 0,
       maxScore: computeMaxScore(),
       moves: 0,
@@ -164,6 +175,7 @@
       hintLevel: {},
       talkCount: {},
       spawned: {},
+      roomTurns: {},
       roomStates,
       history: []
     };
@@ -681,6 +693,7 @@
     if (typeof ev === "string") { print(ev, "room-desc"); return; }
     if (ev.message) print(ev.message, "room-desc");
     if (ev.setFlag) setFlag(ev.setFlag);
+    if (ev.setFlag2) setFlag(ev.setFlag2);
     if (Array.isArray(ev.setFlags)) for (const f of ev.setFlags) setFlag(f);
     if (ev.clearFlag) STATE.flags[ev.clearFlag] = false;
     if (ev.grantsItem) {
@@ -688,6 +701,14 @@
       printInstant("(You now have " + aOrThe(W.items[ev.grantsItem].name) + ".)", "system");
     }
     if (ev.scoreEvent) awardScore(ev.scoreEvent);
+    if (ev.setsMoney !== undefined) {
+      STATE.money = ev.setsMoney;
+      printInstant("(You now have $" + STATE.money + ".)", "system");
+    }
+    if (ev.addMoney !== undefined) {
+      STATE.money += ev.addMoney;
+      printInstant("(You now have $" + STATE.money + ".)", "system");
+    }
     if (ev.movesTo) {
       STATE.previousRoom = STATE.currentRoom;
       STATE.currentRoom = ev.movesTo;
@@ -704,12 +725,14 @@
       if (!STATE.flags[flag]) continue;
       const list = Array.isArray(spawns[flag]) ? spawns[flag] : [spawns[flag]];
       for (const spec of list) {
-        const key = flag + "::" + spec.room + "::" + spec.item;
+        const spawnId = spec.item || spec.npc;
+        const key = flag + "::" + spec.room + "::" + spawnId;
         if (STATE.spawned[key]) continue;
         STATE.spawned[key] = true;
         const rs = STATE.roomStates[spec.room];
         if (!rs) continue;
-        if (!rs.items.includes(spec.item)) rs.items.push(spec.item);
+        if (spec.item && !rs.items.includes(spec.item)) rs.items.push(spec.item);
+        if (spec.npc  && !rs.npcs.includes(spec.npc))  rs.npcs.push(spec.npc);
         if (spec.announce) printInstant(spec.announce, "system");
       }
     }
@@ -759,8 +782,11 @@
     return { ok: true };
   }
 
-  function handleGo(dir) {
-    if (!dir) { print("Which direction?", "error"); return false; }
+  function handleGo(dir, stray) {
+    if (!dir) {
+      if (stray) return handlePush(stray);
+      print("Which direction?", "error"); return false;
+    }
     const room = currentRoom();
     const ex = (room.exits || {})[dir];
     if (!ex) { print("You can't go that way.", "error"); return false; }
@@ -795,6 +821,7 @@
     }
     if (!ex.to) { print(ex.failMessage || "That way leads nowhere.", "error"); return false; }
 
+    if (ex.scoreEvent) awardScore(ex.scoreEvent);
     if (ex.message) printInstant(ex.message, "system");
 
     STATE.previousRoom = STATE.currentRoom;
@@ -822,12 +849,23 @@
 
   function handleLook(obj) {
     if (!obj) { renderRoom(true); return false; }
+    // Self-examination special case
+    const selfWords = ["self", "yourself", "me", "myself", "mirror"];
+    if (selfWords.includes((obj || "").toLowerCase())) {
+      print((C.specials && C.specials.self) || "You look fine.", "room-desc");
+      return false;
+    }
     const res = resolveNoun(obj);
     if (res.notFound) { print(pool("unknownNoun", { noun: obj }), "error"); return false; }
     if (res.notHere) { print(pool("notAccessible", { noun: obj }), "error"); return false; }
     if (res.ambiguous) { printAmbiguous(res.ambiguous); return false; }
     const e = entityById(res.id);
     print(e.examine || e.description || "You see nothing special.", "room-desc");
+    // onExamine: fire once, guarded by doneFlag
+    if (e.onExamine && (!e.onExamine.doneFlag || !STATE.flags[e.onExamine.doneFlag])) {
+      applyEventBlock(e.onExamine);
+      if (e.onExamine.doneFlag) STATE.flags[e.onExamine.doneFlag] = true;
+    }
     return false;
   }
 
@@ -887,12 +925,15 @@
   function handleInventory() {
     if (!STATE.inventory.length) {
       printInstant("You are carrying nothing.", "system");
-      return false;
+    } else {
+      printInstant("You are carrying:", "system");
+      for (const id of STATE.inventory) {
+        const it = W.items[id]; if (!it) continue;
+        enqueuePrintInstant("  " + escHTML(it.name), "item");
+      }
     }
-    printInstant("You are carrying:", "system");
-    for (const id of STATE.inventory) {
-      const it = W.items[id]; if (!it) continue;
-      enqueuePrintInstant("  " + escHTML(it.name), "item");
+    if (STATE.money !== undefined && STATE.money > 0) {
+      printInstant("Cash: $" + STATE.money, "system");
     }
     return false;
   }
@@ -947,6 +988,7 @@
     }
     if (rule.message) print(rule.message, "room-desc");
     if (rule.consumesItem) removeFromInventory(aId);
+    if (rule.consumesTarget) removeFromInventory(bId);
     if (rule.grantsItem) {
       STATE.inventory.push(rule.grantsItem);
       printInstant("(You now have " + aOrThe(W.items[rule.grantsItem].name) + ".)", "system");
@@ -976,6 +1018,7 @@
       printInstant("(You now have " + aOrThe(W.items[rule.grantsItem].name) + ".)", "system");
     }
     if (rule.setsFlag) setFlag(rule.setsFlag);
+    if (rule.setFlag2) setFlag(rule.setFlag2);
     if (rule.scoreEvent) awardScore(rule.scoreEvent);
     return true;
   }
@@ -1021,6 +1064,10 @@
         print(rule.message, "npc");
         if (rule.setsFlag) setFlag(rule.setsFlag);
         if (rule.scoreEvent) awardScore(rule.scoreEvent);
+        if (rule.setsMoney !== undefined) {
+          STATE.money = rule.setsMoney;
+          printInstant("(You now have $" + STATE.money + ".)", "system");
+        }
         return true;
       }
       print("\"I don't know anything about that.\"", "npc");
@@ -1031,7 +1078,15 @@
     STATE.talkCount[npc.id] = (STATE.talkCount[npc.id] || 0) + 1;
 
     let variant = "default";
-    if (npc.dialogueFlagKey && npc.dialogueFlagMap) {
+    // Priority flag list (multi-level trust, etc.)
+    if (npc.dialogueFlagPriority && npc.dialogueFlagPriorityMap) {
+      for (const flagName of npc.dialogueFlagPriority) {
+        if (STATE.flags[flagName]) {
+          const key = npc.dialogueFlagPriorityMap[flagName];
+          if (key && npc.dialogue[key]) { variant = key; break; }
+        }
+      }
+    } else if (npc.dialogueFlagKey && npc.dialogueFlagMap) {
       const v = !!STATE.flags[npc.dialogueFlagKey];
       const key = npc.dialogueFlagMap[String(v)];
       if (key && npc.dialogue[key]) variant = key;
@@ -1135,7 +1190,7 @@
     }
     try {
       const payload = { savedAt: Date.now(), state: STATE };
-      localStorage.setItem("embarcadero_save_" + slot, JSON.stringify(payload));
+      localStorage.setItem("soma_save_" + slot, JSON.stringify(payload));
       printInstant("Game saved to slot " + slot + ".", "system");
     } catch (e) {
       print("Save failed: " + e.message, "error");
@@ -1150,7 +1205,7 @@
       return false;
     }
     try {
-      const raw = localStorage.getItem("embarcadero_save_" + slot);
+      const raw = localStorage.getItem("soma_save_" + slot);
       if (!raw) { print("No save in slot " + slot + ".", "error"); return false; }
       const payload = JSON.parse(raw);
       STATE = payload.state || payload;  // back-compat
@@ -1166,7 +1221,7 @@
   function handleSaves() {
     printInstant("Save slots:", "system");
     for (const s of SAVE_SLOTS) {
-      const raw = localStorage.getItem("embarcadero_save_" + s);
+      const raw = localStorage.getItem("soma_save_" + s);
       if (!raw) {
         enqueuePrintInstant("  " + s + ". (empty)", "system");
         continue;
@@ -1236,8 +1291,10 @@
   /* ------------------------------------------------------------------ */
 
   function handleSpecial(verb) {
-    const specials = C.specials || {};
     const key = verb.replace(/^_/, "").toLowerCase();
+    // Room verb override takes priority
+    if (tryRoomOverride(key.toUpperCase(), null, null)) return true;
+    const specials = C.specials || {};
     const v = specials[key];
     if (!v) return false;
     if (Array.isArray(v)) {
@@ -1247,7 +1304,7 @@
     } else {
       print(v, "system");
     }
-    return false;
+    return true;
   }
 
   /* ------------------------------------------------------------------ */
@@ -1269,6 +1326,142 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /*  New handlers                                                       */
+  /* ------------------------------------------------------------------ */
+
+  function handlePush(obj) {
+    if (!obj) { print("Push what?", "error"); return false; }
+    const res = resolveNoun(obj);
+    if (res.notFound) { print(pool("unknownNoun", { noun: obj }), "error"); return false; }
+    if (res.ambiguous) { printAmbiguous(res.ambiguous); return false; }
+    const e = entityById(res.id);
+    if (e && e.pushable) {
+      const pb = e.pushable;
+      if (pb.requiresFlag && !STATE.flags[pb.requiresFlag]) {
+        print(pb.failMessage || "That doesn't budge.", "error");
+        return false;
+      }
+      if (pb.message) print(pb.message, "room-desc");
+      if (pb.setsFlag) setFlag(pb.setsFlag);
+      if (pb.scoreEvent) awardScore(pb.scoreEvent);
+      return true;
+    }
+    if (tryRoomOverride("PUSH", res.id, null)) return true;
+    print("Pushing that accomplishes nothing.", "error");
+    return false;
+  }
+
+  function handleBuy(direct) {
+    if (!direct) { print("Buy what?", "error"); return false; }
+    const want = direct.toLowerCase();
+    const rs = currentRoomState();
+    for (const nid of rs.npcs) {
+      const npc = W.npcs[nid];
+      if (!npc || !npc.shop) continue;
+      for (const key in npc.shop) {
+        if (key === want || want.includes(key) || key.includes(want)) {
+          const entry = npc.shop[key];
+          const price = entry.price || 0;
+          if (STATE.money < price) {
+            print("You don't have enough money. (You have $" + STATE.money + ", this costs $" + price + ".)", "error");
+            return false;
+          }
+          STATE.money -= price;
+          print(entry.message, "npc");
+          if (entry.setsFlag) setFlag(entry.setsFlag);
+          if (Array.isArray(entry.setsFlags)) for (const f of entry.setsFlags) setFlag(f);
+          if (entry.grantsItem) {
+            STATE.inventory.push(entry.grantsItem);
+            printInstant("(You now have " + aOrThe(W.items[entry.grantsItem].name) + ".)", "system");
+          }
+          if (entry.scoreEvent) awardScore(entry.scoreEvent);
+          if (price > 0) printInstant("($" + STATE.money + " remaining.)", "system");
+          return true;
+        }
+      }
+    }
+    print("There's nothing to buy here, or no one to buy it from.", "error");
+    return false;
+  }
+
+  function handleSmell(obj) {
+    if (obj) {
+      const res = resolveNoun(obj);
+      if (!res.notFound && !res.ambiguous) {
+        const e = entityById(res.id);
+        if (e && e.smell) { print(e.smell, "room-desc"); return false; }
+      }
+    }
+    const room = currentRoom();
+    if (room && room.smell) { print(room.smell, "room-desc"); return false; }
+    print((C.specials && C.specials.smell) || "Nothing remarkable.", "room-desc");
+    return false;
+  }
+
+  function handleListen(obj) {
+    if (obj) {
+      const res = resolveNoun(obj);
+      if (!res.notFound && !res.ambiguous) {
+        const e = entityById(res.id);
+        if (e && e.sound) { print(e.sound, "room-desc"); return false; }
+      }
+    }
+    const room = currentRoom();
+    if (room && room.sound) { print(room.sound, "room-desc"); return false; }
+    print((C.specials && C.specials.listen) || "Nothing remarkable.", "room-desc");
+    return false;
+  }
+
+  function handleCall(obj) {
+    if (STATE.currentRoom === "lone_star" && STATE.inventory.includes("matchbook")) {
+      print("You use the payphone. You dial the number from the matchbook. It rings three times. Then: Marcus's voice, recorded: 'Leave a message after the—' Click. The mailbox is full.", "room-desc");
+      return false;
+    }
+    print((C.specials && C.specials.call) || "Your phone is dead. But there might be a payphone somewhere.", "system");
+    return false;
+  }
+
+  function handleKiss(obj) {
+    if (!obj) { print((C.specials && C.specials.kiss) || "There's no one here to kiss.", "system"); return false; }
+    const res = resolveNoun(obj);
+    if (res.notFound) { print(pool("unknownNoun", { noun: obj }), "error"); return false; }
+    if (res.notHere) { print(pool("notAccessible", { noun: obj }), "error"); return false; }
+    const npc = W.npcs[res.id];
+    if (npc && npc.interactions) {
+      const rule = STATE.flags["leo_trust_full"] && npc.interactions.kiss
+        ? npc.interactions.kiss
+        : npc.interactions.kiss_default || npc.interactions.kiss;
+      if (rule) { print(rule.message || rule, "npc"); return false; }
+    }
+    print("Maybe another time.", "system");
+    return false;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Death timer check (called each command turn)                       */
+  /* ------------------------------------------------------------------ */
+
+  function checkDeathTimers() {
+    if (STATE.flags.game_over) return;
+    const room = currentRoom();
+    if (!room || !room.deathTimer) return;
+    const roomId = STATE.currentRoom;
+    const turns = (STATE.roomTurns[roomId] || 0) + 1;
+    STATE.roomTurns[roomId] = turns;
+    const dt = room.deathTimer;
+    if (dt.death && turns >= dt.death.at) {
+      print(dt.death.message, "room-desc");
+      STATE.flags.game_over = true;
+      return;
+    }
+    if (Array.isArray(dt.warnings)) {
+      for (const w of dt.warnings) {
+        if (turns === w.at) { print(w.message, "room-desc"); break; }
+      }
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
   /*  Dispatch                                                           */
   /* ------------------------------------------------------------------ */
 
@@ -1278,7 +1471,7 @@
       case "_UNKNOWN":
         print(pool("unknownVerb", { word: parsed.word }), "error"); return false;
 
-      case "GO":         return handleGo(parsed.direction);
+      case "GO":         return handleGo(parsed.direction, parsed.stray);
       case "LOOK":       return handleLook(parsed.direct);
       case "TAKE":       return handleTake(parsed.direct);
       case "DROP":       return handleDrop(parsed.direct);
@@ -1289,6 +1482,13 @@
       case "OPEN":       return handleOpen(parsed.direct);
       case "ATTACK":     return handleAttack(parsed.direct);
       case "PET":        return handlePet(parsed.direct);
+      case "PUSH":       return handlePush(parsed.direct);
+      case "BUY":        return handleBuy(parsed.rawRest || parsed.direct);
+      case "SMELL":      return handleSmell(parsed.direct);
+      case "LISTEN":     return handleListen(parsed.direct);
+      case "CALL":       return handleCall(parsed.direct);
+      case "KISS":       return handleKiss(parsed.direct);
+      case "UNDRESS":    return handleSpecial("_UNDRESS") || false;
       case "WAIT":       return handleWait();
       case "HELP":       print(C.help, "system"); return false;
       case "HINT":       return handleHint();
@@ -1308,7 +1508,8 @@
 
       default:
         if (parsed.verb && parsed.verb.startsWith("_")) {
-          if (handleSpecial(parsed.verb)) return false;
+          handleSpecial(parsed.verb);
+          return false;
         }
         print(pool("cantDoThat"), "error");
         return false;
@@ -1339,6 +1540,8 @@
       STATE.moves += 1;
       updateHUD();
     }
+
+    checkDeathTimers();
 
     if (parsed.verb && parsed.verb !== "AGAIN" &&
         !["UNDO", "SAVE", "LOAD", "SAVES", "HELP", "HINT", "SCORE", "MAP", "INVENTORY"]
@@ -1373,7 +1576,7 @@
       if (TYPING) SKIP_ALL = true;
     });
 
-    window._EMB = { STATE: () => STATE, parse, dispatch, runCommand };
+    window._SOMA = { STATE: () => STATE, parse, dispatch, runCommand };
   }
 
   if (document.readyState === "loading") {
