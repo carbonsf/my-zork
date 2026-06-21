@@ -694,7 +694,6 @@ window.WORLD = {
         wrist_cuff: {
           message: "You thread the brass key through the brass ring on the leather cuff. It settles there naturally, like it was made for it — a wearable key, practical and resonant. You clip it to your wrist.",
           grantsItem: "key_cuff",
-          consumesItem: true,
           consumesTarget: true,
           scoreEvent: "key_cuff_made"
         }
@@ -1258,7 +1257,7 @@ window.WORLD = {
       onDialogue: {
         default: {
           grantsItem: "satchel",
-          setsFlag: "marcus_talked",
+          setFlag: "marcus_talked",
           scoreEvent: "marcus_reached"
         }
       }
