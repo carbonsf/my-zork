@@ -1062,7 +1062,13 @@ window.WORLD = {
       dialogueFlagMap: { "true": "after", "false": "default" },
       onDialogue: {
         default: { setFlag: "smoker_talked" }
-      }
+      },
+      unknownTopicResponse: "He takes a long drag. Exhales. 'Couldn't say.'",
+      showFallback: [
+        "He glances at it between drags. Returns his attention to the street.",
+        "He takes it in. Keeps smoking. 'Sure,' he says, without elaborating.",
+        "He looks at what you're holding. 'Okay.' He pulls on his cigarette."
+      ]
     },
 
     leo: {
@@ -1070,6 +1076,12 @@ window.WORLD = {
       name: "Leo",
       aliases: ["leo", "man", "guy at table"],
       description: "Late forties. Quiet. A well-worn leather jacket that fits him like a second skin. He's been nursing that beer for a while.",
+      unknownTopicResponse: "He looks at you for a moment. 'I don't know anything about that,' he says. He might be lying.",
+      showFallback: [
+        "He looks at it carefully, then sets it on the table between you. Doesn't say anything.",
+        "He examines it without taking it. Nods once, in a way that means he's noted it.",
+        "He glances at it. Drinks his beer. His expression doesn't change."
+      ],
       dialogueFlagPriority: ["leo_trust_full", "leo_trust_2", "leo_trust_1"],
       dialogueFlagPriorityMap: {
         "leo_trust_full": "trust_full",
@@ -1099,6 +1111,24 @@ window.WORLD = {
           setsFlag: "leo_trust_full",
           scoreEvent: "leo_full_trust"
         },
+        "give brass_key": {
+          message: "He looks at the brass key. Something crosses his face. 'Marcus makes those.' Very quiet. 'That's his work — you can tell by the hand-finishing.' He gives it back. Doesn't say anything else."
+        },
+        "give rubber_wristband": {
+          message: "He looks at the black wristband without expression. 'Club entry. Someone went to the Powerhouse.' He hands it back and takes a sip of his beer."
+        },
+        "give wrist_cuff": {
+          message: "He looks at the leather cuff for a long moment. 'Someone left that at the Powerhouse. I saw it there last month.' He hands it back. 'Didn't know whose it was.'"
+        },
+        "give drummer_page": {
+          message: "His eyes go to the page. He doesn't reach for it. 'Issue 114.' His voice is quieter. 'Alan had a stack of those at the shop. Marcus used to read them in here.'"
+        },
+        "give matchbook": {
+          message: "He looks at the matchbook. 'Lone Star.' A long pause. 'You talked to them before coming here.' He hands it back. Nods, slightly. You've confirmed something."
+        },
+        "give uv_flashlight": {
+          message: "He looks at the UV flashlight. 'You bought that from Mr. S.' Not a question. 'You're further along than I thought.' He hands it back."
+        },
         "kiss": {
           requiresFlag: "leo_trust_full",
           message: "He leans in. Brief. Warm. He pulls back and looks at you like he's making a decision."
@@ -1117,6 +1147,12 @@ window.WORLD = {
       dialogue: {
         default: "'What'll it be?' He's already reaching for a glass."
       },
+      unknownTopicResponse: "He shakes his head slowly. 'Can't help you there.' He keeps moving.",
+      showFallback: [
+        "He sets down whatever he's holding and looks at it. 'Okay.' He's waiting for you to explain.",
+        "He glances at it without reaching for it. 'Where'd you get that?'",
+        "'Interesting.' He doesn't touch it. Goes back to the bar."
+      ],
       shop: {
         "drink": { price: 5, message: "Jude slides a drink across the bar without comment. You take it in two swallows. It helps." }
       },
@@ -1133,6 +1169,27 @@ window.WORLD = {
         },
         "ask about alan": {
           message: "'Alan Selby ran Mr. S for decades. Passed a few years back. He and Marcus went way back — Marcus did some of his historical research using the Mr. S archive. Good man.'"
+        },
+        "ask about ringold": {
+          message: "'Ringold's around the corner. There's a memorial there — standing stones, brass bootprints in the concrete. Marcus was involved in installing some of it, years back.'"
+        },
+        "ask about eagle": {
+          message: "'Eagle's the flagship. Been here forever.' He nods toward the patio. 'If you want to find people from the old community, this is the place to start.'"
+        },
+        "give brass_key": {
+          message: "'Hand-finished.' He turns it over in his hands. 'Someone made this recently. You can tell by the tool marks.' He gives it back. 'Marcus?'"
+        },
+        "give rubber_wristband": {
+          message: "He examines it briefly. 'Club wristband. Powerhouse, probably.' He hands it back. 'Been a while since I went to one of those.'"
+        },
+        "give wrist_cuff": {
+          message: "'Good leather.' He runs his thumb along the edge. 'Workshop quality. That's not off a rack.' He hands it back. 'Where'd you find this?'"
+        },
+        "give uv_flashlight": {
+          message: "'UV light.' He looks from the flashlight to you. 'Someone sent you to read something.' He hands it back without asking what."
+        },
+        "give matchbook": {
+          message: "He sees it and one corner of his mouth lifts. 'You came from the Lone Star.' He hands it back. 'Good. They're good people over there.'"
         }
       }
     },
@@ -1148,6 +1205,12 @@ window.WORLD = {
       },
       dialogueFlagKey: "sable_opened",
       dialogueFlagMap: { "true": "opened", "false": "default" },
+      unknownTopicResponse: "They glance up from the decks. 'No idea. Sorry.' Back to work.",
+      showFallback: [
+        "They glance at it without taking their hands off the decks. 'Okay.' Back to work.",
+        "They look at what you're holding. 'Interesting.' They don't elaborate.",
+        "One eyebrow goes up. They look at it for a moment. Then they're back to the music."
+      ],
       interactions: {
         "ask about basement": {
           message: "'Basement's for friends.' A pause. 'Tell me why you want to go down there.'"
@@ -1178,6 +1241,12 @@ window.WORLD = {
       },
       dialogueFlagKey: "trick_passed",
       dialogueFlagMap: { "true": "passed", "false": "default" },
+      unknownTopicResponse: "'Not really my department.' He shrugs one massive shoulder.",
+      showFallback: [
+        "He takes it in without comment. Hands it back. Doesn't move.",
+        "He looks at it once, carefully. 'Nice.' He hands it back. Still blocking the door.",
+        "He glances at what you're holding. 'Okay.' He's not moving."
+      ],
       interactions: {
         "ask about ringold": {
           message: "'It's a memorial. Not a shortcut.' He says it without heat."
@@ -1188,8 +1257,35 @@ window.WORLD = {
           setsFlag: "trick_passed",
           scoreEvent: "trick_passed"
         },
+        "ask about door": {
+          message: "'Private party. Members and guests.' He crosses his arms. 'You can go in through the Eagle if you want a drink.'"
+        },
+        "ask about eagle": {
+          message: "'Eagle's that way.' He nods east. 'Good people in there. Might know who you're looking for.'"
+        },
         "kiss": {
           message: "'Not that kind of bar.' He winks."
+        },
+        "give rubber_wristband": {
+          message: "He glances at the black wristband. 'Club night.' He hands it back. 'Wrong wristband for this door, friend.'"
+        },
+        "give wrist_cuff": {
+          message: "He notices the leather cuff. Gives it a slow nod. 'Good work.' He hands it back. Doesn't move."
+        },
+        "give brass_key": {
+          message: "He takes the brass key and turns it over in his big hands. 'That's hand-finished.' He looks at you differently. 'Where'd you get this?' He hands it back, not ready to answer his own question."
+        },
+        "give drummer_page": {
+          message: "He looks at the magazine page. 'Drummer 114.' A quiet pause. 'Old issue. Good one.' He hands it back. Not enough."
+        },
+        "give key_cuff": {
+          message: "He takes in the key clipped to the leather cuff. Something moves behind his eyes. 'That's Marcus's style of work.' He looks at you steadily. 'You know Marcus?' He's asking carefully."
+        },
+        "give matchbook": {
+          message: "'Lone Star.' He glances at it. 'Good bar. Good people.' He hands it back. Still not moving."
+        },
+        "give uv_flashlight": {
+          message: "He raises an eyebrow at the UV flashlight. 'You looking at the walls down there?' He hands it back. 'I've heard about that.'"
         }
       }
     },
@@ -1202,6 +1298,12 @@ window.WORLD = {
       dialogue: {
         default: "'What can I get you?' He sets down the cloth."
       },
+      unknownTopicResponse: "He shakes his head once, slowly. 'Can't help you with that.'",
+      showFallback: [
+        "He looks at it without touching it. Sets his cloth down and looks at you. 'Okay.'",
+        "'Interesting.' He doesn't reach for it. Resumes wiping the bar.",
+        "He glances at it. 'Where'd you pick that up?' He doesn't wait for an answer."
+      ],
       shop: {
         "drink": {
           price: 5,
@@ -1216,6 +1318,21 @@ window.WORLD = {
         },
         "ask about marcus": {
           message: "'Marcus Cahill. Used to come in here. Quiet. Working on something — papers spread out on the table. Haven't seen him in a while.' He pauses. 'You're the second person to ask about him this week.'"
+        },
+        "ask about ringold": {
+          message: "'Ringold Alley's around the corner. There's a standing stone — memorial to some of the old community. Worth seeing, if you haven't.' He goes back to the bar."
+        },
+        "give brass_key": {
+          message: "'Hand-finished.' He turns it over once and sets it on the bar. 'Someone made that recently. That's not a reproduction.' He hands it back."
+        },
+        "give rubber_wristband": {
+          message: "He glances at the black band. 'Powerhouse wristband, looks like.' He goes back to his cloth. 'Long night ahead of you.'"
+        },
+        "give drummer_page": {
+          message: "He reaches for the page and looks at it with care. 'Drummer 114. Marcus donated a whole stack of these to the historical society.' He hands it back. 'He had the original binders.'"
+        },
+        "give matchbook": {
+          message: "He sees it and the corner of his mouth lifts. 'Mine, actually.' He hands it back. 'Well. One of mine. I give those out sometimes.'"
         }
       }
     },
@@ -1228,6 +1345,12 @@ window.WORLD = {
       dialogue: {
         default: "'Welcome to Mr. S. Looking for anything specific?'"
       },
+      unknownTopicResponse: "She considers that for a moment. 'I'm not sure I can help with that.'",
+      showFallback: [
+        "She looks at it with professional interest. 'That's good work.' She doesn't ask where you got it.",
+        "She examines it carefully without reaching for it. 'Okay. What would you like to know?'",
+        "She gives it a brief, practiced look. 'Interesting. Is there something specific you're trying to do with it?'"
+      ],
       shop: {
         "flashlight":    { price: 15, grantsItem: "uv_flashlight", message: "'Fifteen dollars.' She sets it on the counter. 'Good choice. Batteries are included.'", scoreEvent: "uv_flashlight_bought" },
         "uv flashlight": { price: 15, grantsItem: "uv_flashlight", message: "'Fifteen dollars.' She sets it on the counter.", scoreEvent: "uv_flashlight_bought" },
@@ -1242,6 +1365,21 @@ window.WORLD = {
         },
         "ask about alan": {
           message: "'Alan Selby built this place into what it is. Passed a few years ago.' Her voice is matter-of-fact but her eyes aren't. 'He's on the wall in Ringold. You should go look.'"
+        },
+        "ask about ringold": {
+          message: "'Ringold Alley. Marcus spent a lot of time there. The standing stones, the bootprints in the concrete — he helped research the names on those, years ago.'"
+        },
+        "give brass_key": {
+          message: "She takes the key and examines it with a practiced eye. 'Workshop quality. Hand-finished.' She turns it over. 'Marcus Cahill made this.' She hands it back carefully. 'I'd recognize his work anywhere.'"
+        },
+        "give drummer_page": {
+          message: "'Drummer 114.' She handles it gently. 'Marcus donated the original issues to the archive. This one disappeared — he must have taken it for something.' She hands it back. 'It was important to him.'"
+        },
+        "give wrist_cuff": {
+          message: "She examines the leather cuff. 'That was in the workshop. Marcus left it.' She looks up. 'Where did you find this?'"
+        },
+        "give rubber_wristband": {
+          message: "She glances at the rubber wristband. 'Club entry. That's from the Powerhouse, I think.' She hands it back. 'A long night ahead of you.'"
         }
       }
     },
@@ -1260,7 +1398,13 @@ window.WORLD = {
           setFlag: "marcus_talked",
           scoreEvent: "marcus_reached"
         }
-      }
+      },
+      unknownTopicResponse: "Marcus looks at you. 'I don't know. I've been underground for weeks.' A pause. 'Literally.'",
+      showFallback: [
+        "Marcus looks at what you're holding. Something in his face — recognition, or memory. 'You've been busy,' he says quietly.",
+        "He looks at it with tired eyes. 'You found that up there.' Not a question. 'Good. It matters.'",
+        "He examines it without taking it. 'I know what that is.' He doesn't elaborate. Yet."
+      ]
     },
 
     rubin: {
@@ -1273,7 +1417,13 @@ window.WORLD = {
         talked:  "'What you found is real. The vault predates SOMA as we know it. And it will survive — in the archive, if not in the ground.'"
       },
       dialogueFlagKey: "marcus_talked",
-      dialogueFlagMap: { "true": "talked", "false": "default" }
+      dialogueFlagMap: { "true": "talked", "false": "default" },
+      unknownTopicResponse: "She makes a note and looks up. 'I'll look into that.'",
+      showFallback: [
+        "She looks at it carefully, the way someone looks at evidence. Makes a small note. 'Where did you find that?'",
+        "She examines it. 'Okay.' She writes something down. 'This is useful.'",
+        "She takes it in with professional attention. 'That's relevant. I'll need to document it.'"
+      ]
     }
 
   },
@@ -1537,6 +1687,8 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
   let PREV_STATE = null;
   let LAST_COMMAND = null;
   let FAILURE_CURSORS = {};
+  let CURRENT_PARSED = null;   // set by dispatch(), read by printAmbiguous()
+  let PENDING_DISAMBIG = null; // set when player must clarify an ambiguous noun
 
   /* Typewriter */
   const TYPE_DELAY = 4;               // ms per character
@@ -2395,6 +2547,20 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
       if (give) return applyNpcRule(npc, give, aId);
     }
     if (!rule) {
+      // When showing/giving an item to an NPC with no specific interaction,
+      // show character-appropriate flavor rather than a generic error.
+      if (W.npcs[bId]) {
+        const npc = W.npcs[bId];
+        const itemName = (W.items[aId] || {}).name || aId;
+        const fallbacks = npc.showFallback;
+        if (fallbacks) {
+          const lines = Array.isArray(fallbacks) ? fallbacks : [fallbacks];
+          print(lines[Math.floor(Math.random() * lines.length)], "npc");
+        } else {
+          printInstant("They glance at " + aOrThe(itemName) + " without much reaction.", "system");
+        }
+        return false;
+      }
       print(pool("cantDoThat"), "error");
       return false;
     }
@@ -2493,7 +2659,7 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
         }
         return true;
       }
-      print("\"I don't know anything about that.\"", "npc");
+      print(npc.unknownTopicResponse || "\"I don't know anything about that.\"", "npc");
       return false;
     }
 
@@ -2748,6 +2914,8 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
   function printAmbiguous(ids) {
     const names = ids.map(shortName);
     print(pool("ambiguous", { a: names[0], b: names[1] }), "error");
+    // Save state so the player's next input can resolve the ambiguity
+    PENDING_DISAMBIG = { candidates: ids, parsed: CURRENT_PARSED };
   }
 
   /* ------------------------------------------------------------------ */
@@ -2891,6 +3059,7 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
   /* ------------------------------------------------------------------ */
 
   function dispatch(parsed) {
+    CURRENT_PARSED = parsed;
     switch (parsed.verb) {
       case "_PROFANITY": print(pool("profanity"), "system"); return false;
       case "_UNKNOWN":
@@ -2970,6 +3139,32 @@ window.__loaded_world = true; }catch(e){window.__err_world=e&&e.stack?e.stack:St
     if (STATE.flags.game_over) {
       print("The game is over. Type RESTART to play again, or LOAD 1/2/3.", "system");
       return;
+    }
+
+    // Resolve pending disambiguation — player answered "which do you mean?"
+    if (PENDING_DISAMBIG) {
+      const pd = PENDING_DISAMBIG;
+      PENDING_DISAMBIG = null;
+      const wantLower = raw.toLowerCase().replace(/\b(the|a|an)\b\s*/g, "").trim();
+      const chosen = pd.candidates.find(function(id) {
+        const e = entityById(id); if (!e) return false;
+        const names = [e.name].concat(e.aliases || []).map(function(n) { return n.toLowerCase(); });
+        return names.some(function(n) {
+          return n === wantLower ||
+            wantLower.split(/\s+/).every(function(tok) { return n.split(/\s+/).includes(tok); });
+        });
+      });
+      if (chosen) {
+        printInstant("(" + entityById(chosen).name + ".)", "system");
+        const newParsed = Object.assign({}, pd.parsed, { direct: entityById(chosen).name });
+        PREV_STATE = JSON.stringify(STATE);
+        const moved = dispatch(newParsed);
+        if (moved) { STATE.moves += 1; updateHUD(); }
+        checkDeathTimers();
+        LAST_COMMAND = raw;
+        return;
+      }
+      // Input didn't match any candidate — fall through to normal parsing
     }
 
     const parsed = parse(raw);

@@ -174,6 +174,8 @@
   let PREV_STATE = null;
   let LAST_COMMAND = null;
   let FAILURE_CURSORS = {};
+  let CURRENT_PARSED = null;   // set by dispatch(), read by printAmbiguous()
+  let PENDING_DISAMBIG = null; // set when player must clarify an ambiguous noun
 
   /* Typewriter */
   const TYPE_DELAY = 4;               // ms per character
@@ -1032,6 +1034,20 @@
       if (give) return applyNpcRule(npc, give, aId);
     }
     if (!rule) {
+      // When showing/giving an item to an NPC with no specific interaction,
+      // show character-appropriate flavor rather than a generic error.
+      if (W.npcs[bId]) {
+        const npc = W.npcs[bId];
+        const itemName = (W.items[aId] || {}).name || aId;
+        const fallbacks = npc.showFallback;
+        if (fallbacks) {
+          const lines = Array.isArray(fallbacks) ? fallbacks : [fallbacks];
+          print(lines[Math.floor(Math.random() * lines.length)], "npc");
+        } else {
+          printInstant("They glance at " + aOrThe(itemName) + " without much reaction.", "system");
+        }
+        return false;
+      }
       print(pool("cantDoThat"), "error");
       return false;
     }
@@ -1130,7 +1146,7 @@
         }
         return true;
       }
-      print("\"I don't know anything about that.\"", "npc");
+      print(npc.unknownTopicResponse || "\"I don't know anything about that.\"", "npc");
       return false;
     }
 
@@ -1385,6 +1401,8 @@
   function printAmbiguous(ids) {
     const names = ids.map(shortName);
     print(pool("ambiguous", { a: names[0], b: names[1] }), "error");
+    // Save state so the player's next input can resolve the ambiguity
+    PENDING_DISAMBIG = { candidates: ids, parsed: CURRENT_PARSED };
   }
 
   /* ------------------------------------------------------------------ */
@@ -1528,6 +1546,7 @@
   /* ------------------------------------------------------------------ */
 
   function dispatch(parsed) {
+    CURRENT_PARSED = parsed;
     switch (parsed.verb) {
       case "_PROFANITY": print(pool("profanity"), "system"); return false;
       case "_UNKNOWN":
@@ -1607,6 +1626,32 @@
     if (STATE.flags.game_over) {
       print("The game is over. Type RESTART to play again, or LOAD 1/2/3.", "system");
       return;
+    }
+
+    // Resolve pending disambiguation — player answered "which do you mean?"
+    if (PENDING_DISAMBIG) {
+      const pd = PENDING_DISAMBIG;
+      PENDING_DISAMBIG = null;
+      const wantLower = raw.toLowerCase().replace(/\b(the|a|an)\b\s*/g, "").trim();
+      const chosen = pd.candidates.find(function(id) {
+        const e = entityById(id); if (!e) return false;
+        const names = [e.name].concat(e.aliases || []).map(function(n) { return n.toLowerCase(); });
+        return names.some(function(n) {
+          return n === wantLower ||
+            wantLower.split(/\s+/).every(function(tok) { return n.split(/\s+/).includes(tok); });
+        });
+      });
+      if (chosen) {
+        printInstant("(" + entityById(chosen).name + ".)", "system");
+        const newParsed = Object.assign({}, pd.parsed, { direct: entityById(chosen).name });
+        PREV_STATE = JSON.stringify(STATE);
+        const moved = dispatch(newParsed);
+        if (moved) { STATE.moves += 1; updateHUD(); }
+        checkDeathTimers();
+        LAST_COMMAND = raw;
+        return;
+      }
+      // Input didn't match any candidate — fall through to normal parsing
     }
 
     const parsed = parse(raw);
