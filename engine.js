@@ -749,6 +749,7 @@
     if (typeof ev === "string") { print(ev, "room-desc"); return; }
     if (ev.message) print(ev.message, "room-desc");
     if (ev.setFlag) setFlag(ev.setFlag);
+    if (ev.setsFlag) setFlag(ev.setsFlag);   // accept both spellings everywhere
     if (ev.setFlag2) setFlag(ev.setFlag2);
     if (Array.isArray(ev.setFlags)) for (const f of ev.setFlags) setFlag(f);
     if (ev.clearFlag) STATE.flags[ev.clearFlag] = false;
@@ -1064,6 +1065,7 @@
       printInstant("(You now have " + aOrThe(W.items[rule.grantsItem].name) + ".)", "system");
     }
     if (rule.setsFlag) setFlag(rule.setsFlag);
+    if (rule.setFlag) setFlag(rule.setFlag);
     if (Array.isArray(rule.setsFlags)) for (const f of rule.setsFlags) setFlag(f);
     if (rule.scoreEvent) awardScore(rule.scoreEvent);
     if (rule.movesTo) {
@@ -1088,6 +1090,7 @@
       printInstant("(You now have " + aOrThe(W.items[rule.grantsItem].name) + ".)", "system");
     }
     if (rule.setsFlag) setFlag(rule.setsFlag);
+    if (rule.setFlag) setFlag(rule.setFlag);
     if (rule.setFlag2) setFlag(rule.setFlag2);
     if (rule.scoreEvent) awardScore(rule.scoreEvent);
     return true;
