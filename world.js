@@ -12,7 +12,8 @@ window.WORLD = {
     title: "SOUTH OF MARKET",
     startRoom: "eagle_plaza",
     startInventory: ["brass_key", "drummer_page"],
-    maxScore: 130
+    maxScore: 130,
+    saveKey: "soma_save_"
   },
 
   /* ------------------------------------------------------------------ */
@@ -434,7 +435,11 @@ window.WORLD = {
       aliases: ["matchbook", "matches", "match", "book"],
       description: "A matchbook from the Lone Star Saloon. The inside cover has a phone number written in ballpoint — a 415 number, not a cell phone.",
       examine: "Lone Star Saloon matchbook. Three matches left. Inside the cover, written in handwriting you're starting to recognize: 415-555-0114. Marcus's number.",
-      scoreOnTake: "matchbook_found"
+      scoreOnTake: "matchbook_found",
+      onCall: {
+        room: "lone_star",
+        message: "You use the payphone. You dial the number from the matchbook. It rings three times. Then: Marcus's voice, recorded: 'Leave a message after the—' Click. The mailbox is full."
+      }
     },
 
     wrist_cuff: {

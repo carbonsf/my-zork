@@ -186,6 +186,7 @@
   /* Save slots */
   const SAVE_SLOTS = ["1", "2", "3"];
   const DEFAULT_SLOT = "1";
+  const SAVE_KEY = (W.meta && W.meta.saveKey) || "save_";
 
   function freshState() {
     const roomStates = {};
@@ -1268,7 +1269,7 @@
     }
     try {
       const payload = { savedAt: Date.now(), state: STATE };
-      localStorage.setItem("soma_save_" + slot, JSON.stringify(payload));
+      localStorage.setItem(SAVE_KEY + slot, JSON.stringify(payload));
       printInstant("Game saved to slot " + slot + ".", "system");
     } catch (e) {
       print("Save failed: " + e.message, "error");
@@ -1283,7 +1284,7 @@
       return false;
     }
     try {
-      const raw = localStorage.getItem("soma_save_" + slot);
+      const raw = localStorage.getItem(SAVE_KEY + slot);
       if (!raw) { print("No save in slot " + slot + ".", "error"); return false; }
       const payload = JSON.parse(raw);
       STATE = payload.state || payload;  // back-compat
@@ -1299,7 +1300,7 @@
   function handleSaves() {
     printInstant("Save slots:", "system");
     for (const s of SAVE_SLOTS) {
-      const raw = localStorage.getItem("soma_save_" + s);
+      const raw = localStorage.getItem(SAVE_KEY + s);
       if (!raw) {
         enqueuePrintInstant("  " + s + ". (empty)", "system");
         continue;
@@ -1493,11 +1494,19 @@
   }
 
   function handleCall(obj) {
-    if (STATE.currentRoom === "lone_star" && STATE.inventory.includes("matchbook")) {
-      print("You use the payphone. You dial the number from the matchbook. It rings three times. Then: Marcus's voice, recorded: 'Leave a message after the—' Click. The mailbox is full.", "room-desc");
+    // Data-driven: an inventory item may define onCall { room?, message }.
+    // If `room` is set, it only fires in that room (e.g. a payphone location).
+    for (const id of STATE.inventory) {
+      const it = W.items[id];
+      const oc = it && it.onCall;
+      if (!oc) continue;
+      if (oc.room && oc.room !== STATE.currentRoom) continue;
+      print(oc.message || oc, "room-desc");
       return false;
     }
-    print((C.specials && C.specials.call) || "Your phone is dead. But there might be a payphone somewhere.", "system");
+    const room = currentRoom();
+    if (room && room.onCall) { print(room.onCall.message || room.onCall, "room-desc"); return false; }
+    print((C.specials && C.specials.call) || "There's no way to make a call here.", "system");
     return false;
   }
 
@@ -1508,9 +1517,10 @@
     if (res.notHere) { print(pool("notAccessible", { noun: obj }), "error"); return false; }
     const npc = W.npcs[res.id];
     if (npc && npc.interactions) {
-      const rule = STATE.flags["leo_trust_full"] && npc.interactions.kiss
-        ? npc.interactions.kiss
-        : npc.interactions.kiss_default || npc.interactions.kiss;
+      // `kiss` may carry requiresFlag; if unmet, fall back to kiss_default.
+      const k = npc.interactions.kiss;
+      const unlocked = k && (!k.requiresFlag || STATE.flags[k.requiresFlag]);
+      const rule = unlocked ? k : (npc.interactions.kiss_default || k);
       if (rule) { print(rule.message || rule, "npc"); return false; }
     }
     print("Maybe another time.", "system");
@@ -1701,7 +1711,7 @@
       if (TYPING) SKIP_ALL = true;
     });
 
-    window._SOMA = { STATE: () => STATE, parse, dispatch, runCommand };
+    window._GAME = { STATE: () => STATE, parse, dispatch, runCommand };
   }
 
   if (document.readyState === "loading") {

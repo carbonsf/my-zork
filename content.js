@@ -162,6 +162,7 @@ window.CONTENT = {
     self:     "You look like someone who came here for a reason. Boots, jeans, t-shirt. You'll do.",
     undress:  "Not yet.",
     kiss:     "There's no one here to kiss.",
+    call:     "Your phone is dead. But there might be a payphone somewhere.",
     smell:    "Diesel and leather conditioner. Fog coming in. The neighborhood smells like itself.",
     listen:   "Traffic on Folsom. The distant thump of music. The city at midnight."
   },
